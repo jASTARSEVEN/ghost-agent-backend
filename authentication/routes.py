@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from . import models, schemas, utils
@@ -35,7 +35,7 @@ def register(payload: UserCreateRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login")
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
     if not user or not utils.verify_password(payload.password, user.password):
         return ResponseHandler.unauthorized("Invalid email or password")
@@ -67,7 +67,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     token_data = TokenSchema(
         access_token=access_token,
         refresh_token=refresh_token,
-        socket_url=SOCKET_URL + f"{user.id}"
+        socket_url=SOCKET_URL.format(protocol="wss" if request.url.scheme == "https" else "ws", 
+                                    domain=request.url.hostname,
+                                    user_id=user.id)
     )
 
     response_payload = {
