@@ -5,15 +5,20 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.17.0",
     "bcrypt>=5.0.0",
     "fastapi[standard]>=0.118.0",
     "httpx>=0.28.1",
+    "ipython>=9.6.0",
     "passlib[bcrypt]>=1.7.4",
     "psycopg2-binary>=2.9.10",
+    "pwdlib[argon2]>=0.2.1",
     "pydantic[email]>=2.11.10",
     "pyjwt>=2.10.1",
     "python-dotenv>=1.1.1",
     "python-jose[cryptography]>=3.5.0",
+    "python-socketio[asyncio]>=5.14.1",
+    "redis>=6.4.0",
     "sqlalchemy>=2.0.43",
     "uvicorn[standard]>=0.37.0",
 ]

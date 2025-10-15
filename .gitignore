@@ -1,0 +1,21 @@
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Ignore virtual environment
+.venv
+.env
+
+# Ignore environment and build files
+*.log
+*.sqlite3
+*.db
+
+# Ignore Alembic cache / compiled files
+alembic/__pycache__/
+alembic/versions/__pycache__/
+
+# Ignore FastAPI specific cache
+*.__pycache__

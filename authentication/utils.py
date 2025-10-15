@@ -1,7 +1,7 @@
 import jwt
 import os
 from datetime import datetime, timedelta, timezone
-from passlib.context import CryptContext
+from pwdlib import PasswordHash
 from fastapi import HTTPException, status
 from dotenv import load_dotenv
 
@@ -12,13 +12,14 @@ ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS"))
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+password_hash = PasswordHash.recommended()
 
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+def hash_password(password):
+    return password_hash.hash(password)
+
+def verify_password(plain_password, hashed_password)-> bool:
+    return password_hash.verify(plain_password, hashed_password)
 
 def create_access_token(data: dict, expires_minutes: int = ACCESS_TOKEN_EXPIRE_MINUTES):
     to_encode = data.copy()
