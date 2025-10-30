@@ -15,6 +15,7 @@ class UserSchema(BaseModel):
     email: str
     first_name: str
     last_name: str
+    is_active: bool
     profile_photo: Optional[str] = None
     last_login: Optional[datetime] = None
 

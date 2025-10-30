@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from authentication import routes as auth_routes
+from authentication.routes import auth_router, user_router
 from chat import routes as ws_routes
 
 
@@ -15,7 +15,8 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(auth_routes.router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
+app.include_router(user_router, prefix="/api")
 app.include_router(ws_routes.router)
 
 @app.get("/api/health")

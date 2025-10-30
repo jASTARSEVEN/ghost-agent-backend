@@ -8,10 +8,10 @@ from common.response_handler import ResponseHandler
 from database import get_db
 from common.constants import SOCKET_URL
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/register")
+@auth_router.post("/register")
 def register(payload: UserCreateRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
     if user:
@@ -34,7 +34,7 @@ def register(payload: UserCreateRequest, db: Session = Depends(get_db)):
     return ResponseHandler.ok("User registered successfully", data=user_data)
 
 
-@router.post("/login")
+@auth_router.post("/login")
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
     if not user or not utils.verify_password(payload.password, user.password):
@@ -80,13 +80,8 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     return ResponseHandler.ok("Login successful", data=response_payload)
 
 
-@router.get("/me")
-def get_me(current_user: models.User = Depends(get_current_user)):
-    user_data = schemas.UserSchema.model_validate(current_user)
-    return ResponseHandler.ok("User profile fetched successfully", data=user_data)
 
-
-@router.post("/refresh-token")
+@auth_router.post("/refresh-token")
 def refresh_token(payload: RefreshTokenRequest, db: Session = Depends(get_db)):
     token_record = db.query(models.UserToken).filter(
         models.UserToken.refresh_token == payload.refresh_token
@@ -113,8 +108,7 @@ def refresh_token(payload: RefreshTokenRequest, db: Session = Depends(get_db)):
 
     return ResponseHandler.ok("Token refreshed successfully", data=response_payload)
 
-
-@router.post("/logout")
+@auth_router.post("/logout")
 def logout(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -142,3 +136,17 @@ def logout(
         return ResponseHandler.bad_request(
             message=f"Error during logout: {str(e)}"
         )
+    
+
+user_router = APIRouter(prefix="/users", tags=["User"])
+
+@user_router.get("/")
+def get_users(db: Session = Depends(get_db)):
+    users = db.query(models.User).all()
+    user_data = [UserSchema.model_validate(user).model_dump() for user in users]
+    return ResponseHandler.ok("User profiles fetched successfully", data=user_data)
+
+@user_router.get("/me")
+def get_me(current_user: models.User = Depends(get_current_user)):
+    user_data = schemas.UserSchema.model_validate(current_user)
+    return ResponseHandler.ok("User profile fetched successfully", data=user_data)
