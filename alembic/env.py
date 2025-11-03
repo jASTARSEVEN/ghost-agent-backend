@@ -17,6 +17,9 @@ config = context.config
 # Override DB URL dynamically
 db_url = os.getenv("DATABASE_URL")
 if db_url:
+    # Replace async driver with psycopg2 for Alembic
+    db_url = db_url.replace("+asyncpg", "+psycopg2")
+    # Set directly from .env (no ConfigParser interpolation)
     config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
@@ -49,6 +52,7 @@ def run_migrations_offline() -> None:
 
     """
     url = config.get_main_option("sqlalchemy.url")
+    url = url.replace("+asyncpg", "+psycopg2")
     context.configure(
         url=url,
         target_metadata=target_metadata,

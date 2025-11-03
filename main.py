@@ -1,24 +1,31 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from authentication.routes import auth_router, user_router
+from authentication.routes.users import user_router
+from authentication.routes.auth import auth_router
+from authentication.routes.roles import role_router
+from authentication.routes.permissions import permission_router
 from chat import routes as ws_routes
+from common.config import settings
 
 
+app = FastAPI(
+    title=settings.APP_NAME,
+    description="Mediverse Backend APIs",
+    version="1.0.0"
+)
 
-app = FastAPI(title="Ghost Agent Backend")
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Configure for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
+# Include routers with prefix
 app.include_router(auth_router, prefix="/api")
 app.include_router(user_router, prefix="/api")
+app.include_router(role_router, prefix="/api")
+app.include_router(permission_router, prefix="/api")
 app.include_router(ws_routes.router)
-
-@app.get("/api/health")
-def health_check():
-    return {"status": "ok", "message": "Ghost Agent Backend Running"}
