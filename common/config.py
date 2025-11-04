@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7)
     
     # App
-    APP_NAME: str = "Mediverse Backend"
+    APP_NAME: str = "GhostAgent Backend"
     DEBUG: bool = False
     
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
