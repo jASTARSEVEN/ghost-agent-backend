@@ -21,7 +21,7 @@ async def get_current_user_from_token(
 
     # Decode token
     payload = decode_token(token)
-    user_id = payload.get("sub")
+    user_id = payload.get("user_id")
     if not user_id:
         return None
 
@@ -32,6 +32,7 @@ async def get_current_user_from_token(
     )
     result = await db.execute(stmt)
     token_record = result.scalar_one_or_none()
+    print(f'Token record found: {token_record}')
     
     if not token_record:
         raise HTTPException(
@@ -46,6 +47,7 @@ async def get_current_user_from_token(
     
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
+    print(f'User fetched from DB: {user}')
 
     return user if user and user.is_active else None
 
