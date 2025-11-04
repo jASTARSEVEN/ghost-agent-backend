@@ -33,13 +33,14 @@ async def list_users(
     )
 
 
+
 @user_router.post("/", response_model=UserOut)
 async def create_user(
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("user.create"))
 ):
-    """Create a new user - requires 'user.create' permission"""
+    """Create a new user with optional role assignment - requires 'user.create' permission"""
     # Check if user already exists
     stmt = select(User).where(User.email == user_data.email)
     result = await db.execute(stmt)
@@ -50,19 +51,32 @@ async def create_user(
             message="User with this email already exists"
         )
 
+    # Validate and fetch roles if role_ids provided
+    roles = []
+    if user_data.role_ids:
+        stmt = select(Role).where(Role.id.in_(user_data.role_ids))
+        result = await db.execute(stmt)
+        roles = result.scalars().all()
+
+        if len(roles) != len(user_data.role_ids):
+            return ResponseHandler.bad_request(
+                message="One or more role IDs are invalid"
+            )
+
     # Create new user
     db_user = User(
         email=user_data.email,
         first_name=user_data.first_name,
         last_name=user_data.last_name,
         password=hash_password(user_data.password),
+        roles=roles  # Assign roles during creation
     )
     db.add(db_user)
     await db.commit()
     await db.refresh(db_user)
 
     return ResponseHandler.created(
-        message="User created successfully",
+        message="User created successfully" + (f" with {len(roles)} role(s)" if roles else ""),
         data=db_user
     )
 

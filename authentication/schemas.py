@@ -55,7 +55,10 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8, max_length=100)
-
+    role_ids: list[int] = Field(
+        default_factory=list, 
+        description="List of role IDs to assign to user"
+    )
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
