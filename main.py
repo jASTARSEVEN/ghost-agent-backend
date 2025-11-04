@@ -10,7 +10,7 @@ from common.config import settings
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description="Mediverse Backend APIs",
+    description="GhostAgent Backend APIs",
     version="1.0.0"
 )
 
