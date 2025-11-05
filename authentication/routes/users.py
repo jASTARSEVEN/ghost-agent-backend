@@ -5,7 +5,7 @@ from authentication.models import User
 from common.dependencies import get_db
 from common.response_handler import ResponseHandler
 from common.dependencies import require_permission
-from authentication.schemas import UserCreate, UserOut, UserUpdate, AssignRolesRequest
+from authentication.schemas import UserCreate, UserOut, UserUpdate, AssignRolesRequest, BulkUpdateStatusRequest, BulkDeleteRequest
 from authentication.models import Role
 from sqlalchemy.orm import selectinload
 from authentication.utils import hash_password
@@ -210,3 +210,77 @@ async def get_user_permissions(
         message=f"User has {len(permissions)} permissions",
         data=permissions
     )
+
+
+@user_router.post("/bulk-update")
+async def bulk_update_user_status(
+    payload: BulkUpdateStatusRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("user.delete"))
+):
+    """
+    Bulk update 'is_active' status for multiple users.
+    Requires 'user.bulk-update' permission.
+    """
+
+    stmt = select(User).where(User.id.in_(payload.ids))
+    result = await db.execute(stmt)
+    users = result.scalars().all()
+
+    if not users:
+        return ResponseHandler.not_found(message="No users found for given IDs")
+
+    # Check for missing IDs
+    found_ids = {u.id for u in users}
+    missing_ids = set(payload.ids) - found_ids
+    if missing_ids:
+        return ResponseHandler.bad_request(
+            message=f"Some user IDs not found: {list(missing_ids)}"
+        )
+
+    # Update 'is_active' status
+    for user in users:
+        user.is_active = payload.is_active
+
+    await db.commit()
+    await db.refresh(users[0])  # refresh one example user if needed
+
+    return ResponseHandler.ok(
+        message=f"Updated is_active={payload.is_active} for {len(users)} user(s)",
+        data=[{"id": u.id, "is_active": u.is_active} for u in users]
+    )
+
+@user_router.post("/bulk-delete")
+async def bulk_delete_users(
+    payload: BulkDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("user.delete"))
+):
+    """
+    Bulk delete multiple users.
+    Requires 'user.bulk-delete' permission.
+    """
+
+    stmt = select(User).where(User.id.in_(payload.ids))
+    result = await db.execute(stmt)
+    users = result.scalars().all()
+
+    if not users:
+        return ResponseHandler.not_found(message="No users found for given IDs")
+
+    # Check for missing IDs
+    found_ids = {u.id for u in users}
+    missing_ids = set(payload.ids) - found_ids
+    if missing_ids:
+        return ResponseHandler.bad_request(
+            message=f"Some user IDs not found: {list(missing_ids)}"
+        )
+
+    # Delete users
+    for user in users:
+        await db.delete(user)
+    await db.commit()
+
+    return ResponseHandler.ok(
+        message=f"Deleted {len(users)} user(s)"
+    )    

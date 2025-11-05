@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
-from typing import Optional
+from typing import List, Literal, Optional
 from datetime import datetime
 
 
@@ -132,3 +132,11 @@ class RefreshTokenResponse(BaseModel):
 
 class LogoutRequest(BaseModel):
     refresh_token: str
+
+class BulkUpdateStatusRequest(BaseModel):
+    ids: List[int] = Field(..., description="List of user IDs to update")
+    is_active: bool = Field(..., description="New is_active status")
+
+
+class BulkDeleteRequest(BaseModel):
+    ids: List[int] = Field(..., description="List of user IDs to delete")
