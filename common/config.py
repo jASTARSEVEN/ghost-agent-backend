@@ -7,6 +7,7 @@ load_dotenv()
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL")
+    SUPABASE_URL: str | None = os.getenv("SUPABASE_URL")
     
     # JWT
     SECRET_KEY: str = os.getenv("SECRET_KEY")
@@ -18,7 +19,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "GhostAgent Backend"
     DEBUG: bool = False
     
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="allow")
 
 
 settings = Settings()

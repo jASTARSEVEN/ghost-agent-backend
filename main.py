@@ -6,6 +6,7 @@ from authentication.routes.roles import role_router
 from authentication.routes.permissions import permission_router
 from chat import routes as ws_routes
 from common.config import settings
+from actions.routes import router as actions_router 
 
 
 app = FastAPI(
@@ -29,3 +30,4 @@ app.include_router(user_router, prefix="/api")
 app.include_router(role_router, prefix="/api")
 app.include_router(permission_router, prefix="/api")
 app.include_router(ws_routes.router)
+app.include_router(actions_router, prefix="/api") 
