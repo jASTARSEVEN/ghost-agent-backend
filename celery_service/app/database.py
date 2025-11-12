@@ -61,26 +61,23 @@ from .db_base import Base
 load_dotenv()
 
 # Use sync Postgres (not asyncpg)
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL and "+asyncpg" in DATABASE_URL:
+    # Celery uses a sync engine; switch to psycopg2 driver
+    DATABASE_URL = DATABASE_URL.replace("+asyncpg", "+psycopg2")
 
 # Create sync engine for Celery workers
 engine = create_engine(
     DATABASE_URL,
     echo=False,
-    pool_pre_ping=True,  #  helps with Cosmos idle connection drops
-    pool_recycle=1800,   #  refresh connections every 30 mins
+    pool_pre_ping=True,
+    pool_recycle=1800,
+    connect_args={"options": "-csearch_path=ghostagent,public"},
 )
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
-# Create tables on worker start (if not exist)
-try:
-    Base.metadata.create_all(engine)
-    print("Celery DB ready (tables ensured)")
-except Exception as e:
-    print(" DB Init Error:", e)
+# Do not create tables here; use Alembic migrations to manage schema
 
 
 def save_many_events(events: list):
@@ -94,7 +91,7 @@ def save_many_events(events: list):
         for ev in events:
             row = EventModel(
                 user_id=ev.get("user_id"),
-                ws_conversation_id=ev.get("ws_conversation_id"),
+                conversation_id=ev.get("conversation_id") or ev.get("ws_conversation_id"),
                 call_id=ev.get("call_id"),
                 event_type=ev.get("event_type") or ev.get("type"),
                 payload=ev,

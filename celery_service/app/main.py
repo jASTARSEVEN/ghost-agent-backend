@@ -1,4 +1,3 @@
-from .database import engine
-from .models import Base
-
-Base.metadata.create_all(bind=engine)
+"""Celery app entrypoint does not manage schema.
+Use Alembic migrations in the FastAPI service to create/update tables.
+"""

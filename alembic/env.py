@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from alembic import context
 from database import Base
 from authentication.models import *
+from chat.models import *
 load_dotenv()
 
 # this is the Alembic Config object, which provides
@@ -19,8 +20,10 @@ db_url = os.getenv("DATABASE_URL")
 if db_url:
     # Replace async driver with psycopg2 for Alembic
     db_url = db_url.replace("+asyncpg", "+psycopg2")
-    # Set directly from .env (no ConfigParser interpolation)
-    config.set_main_option("sqlalchemy.url", db_url)
+    # Escape percent signs to avoid ConfigParser interpolation issues
+    safe_db_url = db_url.replace('%', '%%')
+    # Set directly from .env
+    config.set_main_option("sqlalchemy.url", safe_db_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
