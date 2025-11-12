@@ -1,0 +1,27 @@
+# Start with a base image that includes Celery and the necessary dependencies
+FROM python:3.12-slim
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the necessary files from your project to the container
+COPY . /app/
+
+# Install the required Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install supervisor to manage multiple processes
+RUN apt-get update && apt-get install -y supervisor
+
+# Create a configuration directory for Supervisor
+RUN mkdir -p /etc/supervisor/conf.d
+
+# Copy supervisor configuration
+COPY supervisor.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Expose ports for Redis, FastAPI (Uvicorn)
+EXPOSE 6379
+EXPOSE 8000
+
+# Set the command to run supervisor, which will manage the Celery and Celery Beat processes
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

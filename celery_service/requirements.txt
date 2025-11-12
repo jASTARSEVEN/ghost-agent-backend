@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+redis
+celery[redis]
+python-dotenv
+pydantic
+psycopg2-binary>=2.9.10
