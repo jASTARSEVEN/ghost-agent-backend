@@ -254,7 +254,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, role: str):
 
 # -------- HTTP ENDPOINTS --------
 
-@router.get("/conversations")
+@router.get("/api/conversations")
 def get_all_conversations(db: Session = Depends(get_db)):
     rows = (
         db.query(
@@ -277,7 +277,7 @@ def get_all_conversations(db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/conversations/{conversation_id}")
+@router.get("/api/conversations/{conversation_id}")
 def get_messages(conversation_id: str, db: Session = Depends(get_db)):
     msgs = (
         db.query(EventModel)
