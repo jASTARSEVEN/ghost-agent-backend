@@ -19,3 +19,7 @@ alembic/versions/__pycache__/
 
 # Ignore FastAPI specific cache
 *.__pycache__
+
+# Ignore IDE specific files
+.vscode/
+.idea/
