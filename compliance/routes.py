@@ -33,20 +33,9 @@ from common.response_handler import ResponseHandler
 router = APIRouter(prefix="/compliance", tags=["Compliance"])
 
 
-# -------------------- CREATE DRAFT POLICY SET --------------------
-
-@router.post("/policy-sets", response_model=PolicySetOut)
-async def create_policy_set(
-    payload: PolicySetCreate,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_permission("compliance.policy-set.create"))
-):
-    policy_set = await create_draft_policy_set(db, payload, user.id)
-    return ResponseHandler.created("Draft policy set created", policy_set)
-
 # -------------------- LIST ALL POLICY SETS --------------------
 
-@router.get("/policy-sets", response_model=List[PolicySetListItem])
+@router.get("/policy-sets/list", response_model=List[PolicySetListItem])  # Changed path
 async def list_policy_sets(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission("compliance.policy-set.view"))
@@ -57,6 +46,18 @@ async def list_policy_sets(
     """
     policy_sets = await get_all_policy_sets(db, user.id)
     return ResponseHandler.ok("Policy sets fetched", policy_sets)
+
+
+# -------------------- CREATE DRAFT POLICY SET --------------------
+
+@router.post("/policy-sets", response_model=PolicySetOut)
+async def create_policy_set(
+    payload: PolicySetCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission("compliance.policy-set.create"))
+):
+    policy_set = await create_draft_policy_set(db, payload, user.id)
+    return ResponseHandler.created("Draft policy set created", policy_set)
 
 
 # -------------------- UPLOAD DOCUMENTS --------------------
