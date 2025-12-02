@@ -35,7 +35,7 @@ router = APIRouter(prefix="/compliance", tags=["Compliance"])
 
 # -------------------- LIST ALL POLICY SETS --------------------
 
-@router.get("/policy-sets/list", response_model=List[PolicySetListItem])  # Changed path
+@router.get("/policy-sets/lists", response_model=List[PolicySetListItem])
 async def list_policy_sets(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission("compliance.policy-set.view"))
