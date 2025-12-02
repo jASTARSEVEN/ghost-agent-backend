@@ -118,10 +118,16 @@ async def update_user(
     if not user:
         return ResponseHandler.not_found(message="User not found")
 
-    # Update fields
-    update_data = user_data.model_dump(exclude_unset=True)
+    update_data = user_data.model_dump(exclude_unset=True, exclude={"role_ids"})
     for field, value in update_data.items():
         setattr(user, field, value)
+
+    if user_data.role_ids:  # correct check
+        stmt = select(Role).where(Role.id.in_(user_data.role_ids))
+        result = await db.execute(stmt)
+        roles = result.scalars().all()
+
+        user.roles = roles 
 
     await db.commit()
     await db.refresh(user)

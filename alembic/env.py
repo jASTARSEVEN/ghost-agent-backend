@@ -1,13 +1,14 @@
 import os
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
+from sqlalchemy import engine_from_config, text
 from sqlalchemy import pool
 from dotenv import load_dotenv
 
 from alembic import context
 from database import Base
 from authentication.models import *
+from chat.models import *
 load_dotenv()
 
 # this is the Alembic Config object, which provides
@@ -19,8 +20,10 @@ db_url = os.getenv("DATABASE_URL")
 if db_url:
     # Replace async driver with psycopg2 for Alembic
     db_url = db_url.replace("+asyncpg", "+psycopg2")
-    # Set directly from .env (no ConfigParser interpolation)
-    config.set_main_option("sqlalchemy.url", db_url)
+    # Escape percent signs to avoid ConfigParser interpolation issues
+    safe_db_url = db_url.replace('%', '%%')
+    # Set directly from .env
+    config.set_main_option("sqlalchemy.url", safe_db_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -52,12 +55,12 @@ def run_migrations_offline() -> None:
 
     """
     url = config.get_main_option("sqlalchemy.url")
-    url = url.replace("+asyncpg", "+psycopg2")
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        version_table_schema="ghostagent",
     )
 
     with context.begin_transaction():
@@ -78,8 +81,18 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # Set search_path to ghostagent schema so Alembic can see your tables
+        connection.execute(text("SET search_path TO ghostagent, public"))
+        connection.commit()
+        
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata,
+            version_table_schema="ghostagent",
+            # DON'T use include_schemas=True - it will inspect ALL schemas
+            # Instead, rely on search_path to only see ghostagent schema
+            compare_type=True,
+            compare_server_default=True,
         )
 
         with context.begin_transaction():

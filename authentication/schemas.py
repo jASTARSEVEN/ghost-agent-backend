@@ -66,6 +66,7 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = Field(None, min_length=1, max_length=100)
     is_active: Optional[bool] = None
     profile_photo: Optional[str] = None
+    role_ids: Optional[List[int]]
 
 
 class UserOut(UserBase):
