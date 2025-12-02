@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     APP_NAME: str = "GhostAgent Backend"
     DEBUG: bool = False
     
+    # Gemini AI
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+    
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="allow")
 
 
