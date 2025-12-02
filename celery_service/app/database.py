@@ -92,7 +92,7 @@ def save_many_events(events: list):
             row = EventModel(
                 user_id=ev.get("user_id"),
                 conversation_id=ev.get("conversation_id") or ev.get("ws_conversation_id"),
-                call_id=ev.get("call_id"),
+                
                 event_type=ev.get("event_type") or ev.get("type"),
                 payload=ev,
             )

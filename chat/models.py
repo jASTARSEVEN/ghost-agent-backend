@@ -11,7 +11,6 @@ class EventModel(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(String, nullable=False, index=True)
     conversation_id = Column(String, index=True)
-    call_id = Column(String, index=True)
     event_type = Column(String)
     payload = Column(JSONB)
     received_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
