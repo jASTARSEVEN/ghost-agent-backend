@@ -46,6 +46,7 @@ def upgrade() -> None:
         sa.Column('id', sa.Integer(), primary_key=True),
         sa.Column('version', sa.Integer(), nullable=False),
         sa.Column('status', policyset_status_enum, nullable=True),
+        sa.Column('name', sa.String(255), nullable=True),
         sa.Column('created_by', sa.Integer(), sa.ForeignKey('ghostagent.users.id')),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
         sa.Column('updated_at', sa.DateTime(timezone=True)),

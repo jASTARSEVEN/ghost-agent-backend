@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from enum import Enum
 
@@ -25,13 +25,21 @@ class Severity(str, Enum):
 # ---------------- POLICY SET ----------------
 
 class PolicySetCreate(BaseModel):
-    pass
+    name: Optional[str] = Field(None, max_length=255, description="Optional name for the policy set")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Q1 2024 Compliance Policies"
+            }
+        }
 
 
 class PolicySetOut(BaseModel):
     id: int
     version: int
     status: PolicySetStatus
+    name: Optional[str] = None
     created_at: str
 
     class Config:

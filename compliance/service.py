@@ -1,6 +1,6 @@
 import os
 import uuid
-from typing import List
+from typing import List, Optional
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
@@ -40,6 +40,7 @@ async def create_draft_policy_set(db: AsyncSession, payload: PolicySetCreate, us
     policy_set = CompliancePolicySet(
         version=new_version,
         status=PolicySetStatus.draft,
+        name=payload.name,  # Add this line
         created_by=user_id
     )
 

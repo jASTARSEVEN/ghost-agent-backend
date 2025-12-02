@@ -34,6 +34,7 @@ class CompliancePolicySet(Base):
     id = Column(Integer, primary_key=True)
     version = Column(Integer, nullable=False)
     status = Column(Enum(PolicySetStatus), default=PolicySetStatus.draft)
+    name = Column(String(255), nullable=True)
 
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
