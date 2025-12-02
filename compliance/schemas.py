@@ -46,6 +46,19 @@ class PolicySetOut(BaseModel):
         from_attributes = True
 
 
+# Add this new schema for listing
+class PolicySetListItem(BaseModel):
+    """Simplified policy set info for listing."""
+    id: int
+    name: Optional[str] = None
+    version: int
+    status: PolicySetStatus
+    created_at: str
+    
+    class Config:
+        from_attributes = True
+
+
 # ---------------- RULES ----------------
 
 class RuleOut(BaseModel):

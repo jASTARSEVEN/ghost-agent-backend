@@ -255,3 +255,26 @@ async def archive_policy_set(db: AsyncSession, policy_set_id: int, user_id: int)
     await db.refresh(policy_set)
 
     return policy_set
+
+
+# -------------------- GET ALL POLICY SETS --------------------
+
+async def get_all_policy_sets(db: AsyncSession, user_id: int):
+    """
+    Get all policy sets for a user.
+    
+    Args:
+        db: Database session
+        user_id: ID of the user
+        
+    Returns:
+        List of policy sets ordered by creation date (newest first)
+    """
+    stmt = select(CompliancePolicySet).where(
+        CompliancePolicySet.created_by == user_id
+    ).order_by(CompliancePolicySet.created_at.desc())
+    
+    result = await db.execute(stmt)
+    policy_sets = result.scalars().all()
+    
+    return policy_sets

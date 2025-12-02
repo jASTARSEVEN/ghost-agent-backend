@@ -9,16 +9,18 @@ from compliance.service import (
     extract_rules_from_documents,
     get_policy_set_with_rules,
     update_rule,
-    finalize_policy_set
+    finalize_policy_set,
+    get_all_policy_sets
 )
 
 from compliance.schemas import (
     PolicySetCreate,
     PolicySetOut,
+    PolicySetListItem,
     RuleUpdate,
     DocumentOut,
     PolicyExtractionRequest,
-    ExtractionResponse
+    ExtractionResponse,
 )
 
 from compliance.models import CompliancePolicyDocument
@@ -41,6 +43,21 @@ async def create_policy_set(
 ):
     policy_set = await create_draft_policy_set(db, payload, user.id)
     return ResponseHandler.created("Draft policy set created", policy_set)
+
+# -------------------- LIST ALL POLICY SETS --------------------
+
+@router.get("/policy-sets", response_model=List[PolicySetListItem])
+async def list_policy_sets(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission("compliance.policy-set.view"))
+):
+    """
+    Get all policy sets for the current user.
+    Returns a list with id, name, version, status, and created_at.
+    """
+    policy_sets = await get_all_policy_sets(db, user.id)
+    return ResponseHandler.ok("Policy sets fetched", policy_sets)
+
 
 # -------------------- UPLOAD DOCUMENTS --------------------
 
