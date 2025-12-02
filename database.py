@@ -4,7 +4,14 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy import MetaData
 from common.config import settings
 
-ssl_context = ssl.create_default_context()
+# Decide if SSL should be used
+use_ssl = getattr(settings, "DB_SSL", "false").lower() == "true"
+
+connect_args = {}
+
+if use_ssl:
+    ssl_context = ssl.create_default_context()
+    connect_args = {"ssl": ssl_context}
 
 # Create async engine
 engine = create_async_engine(
@@ -14,7 +21,7 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,
-    connect_args={"ssl": ssl_context},
+    connect_args=connect_args,
 )
 
 # Create async session factory
@@ -27,7 +34,6 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 Base = declarative_base(metadata=MetaData(schema="ghostagent"))
-
 
 # Dependency to get DB session
 async def get_db() -> AsyncSession:
