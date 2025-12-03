@@ -13,6 +13,7 @@ class EventModel(Base):
     conversation_id = Column(String, index=True)
     event_type = Column(String)
     payload = Column(JSONB)
+    
     received_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     __table_args__ = (
