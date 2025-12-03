@@ -1,0 +1,4 @@
+"id","name","description","created_at","updated_at"
+1,"Admin","Full system access","2025-11-03 11:07:01.258354+00",NULL
+2,"User Manager","Manage users and roles","2025-11-03 11:07:01.258354+00",NULL
+3,"Viewer","Read-only access","2025-11-03 11:07:01.258354+00",NULL

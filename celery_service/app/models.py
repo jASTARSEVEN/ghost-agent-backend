@@ -1,24 +1,3 @@
-# # models.py
-# import uuid
-# from datetime import datetime
-# from sqlalchemy import Column, String, DateTime, Index
-# from sqlalchemy.dialects.sqlite import JSON
-# from .db_base import Base 
-
-# class EventModel(Base):
-#     __tablename__ = "conversation_events"
-    
-#     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-#     user_id = Column(String, nullable=False, index=True)
-#     conversation_id = Column(String, index=True)
-#     call_id = Column(String, index=True)
-#     event_type = Column(String)
-#     payload = Column(JSON)
-#     received_at = Column(DateTime, default=datetime.utcnow, index=True)
-
-#     __table_args__ = (Index("idx_user_conversation", "user_id", "conversation_id"),)
-
-
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, Index

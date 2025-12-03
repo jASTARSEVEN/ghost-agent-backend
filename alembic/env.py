@@ -1,14 +1,15 @@
-import os
 from logging.config import fileConfig
+import os
 
-from sqlalchemy import engine_from_config, text
+from sqlalchemy import engine_from_config
 from sqlalchemy import pool
-from dotenv import load_dotenv
 
 from alembic import context
 from database import Base
 from authentication.models import *
 from chat.models import *
+from compliance.models import *
+from dotenv import load_dotenv
 load_dotenv()
 
 # this is the Alembic Config object, which provides
@@ -17,6 +18,7 @@ config = context.config
 
 # Override DB URL dynamically
 db_url = os.getenv("DATABASE_URL")
+
 if db_url:
     # Replace async driver with psycopg2 for Alembic
     db_url = db_url.replace("+asyncpg", "+psycopg2")
@@ -34,6 +36,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
+# target_metadata = None
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
@@ -60,7 +63,6 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        version_table_schema="ghostagent",
     )
 
     with context.begin_transaction():
@@ -81,18 +83,8 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        # Set search_path to ghostagent schema so Alembic can see your tables
-        connection.execute(text("SET search_path TO ghostagent, public"))
-        connection.commit()
-        
         context.configure(
-            connection=connection, 
-            target_metadata=target_metadata,
-            version_table_schema="ghostagent",
-            # DON'T use include_schemas=True - it will inspect ALL schemas
-            # Instead, rely on search_path to only see ghostagent schema
-            compare_type=True,
-            compare_server_default=True,
+            connection=connection, target_metadata=target_metadata
         )
 
         with context.begin_transaction():

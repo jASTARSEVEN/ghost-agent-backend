@@ -33,7 +33,7 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
-Base = declarative_base(metadata=MetaData(schema="ghostagent"))
+Base = declarative_base(metadata=MetaData(schema="testdb"))
 
 # Dependency to get DB session
 async def get_db() -> AsyncSession:
