@@ -1,22 +1,25 @@
 """
-Policy extraction agent using Gemini LLM.
-Extracts structured policy rules from compliance documents.
+Policy extraction agent using Azure OpenAI LLM.
+Extracts structured policy rules from compliance documents with intelligent chunking.
 """
+import asyncio
 import json
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
-from compliance.agents.gemini_client import get_gemini_client
+from compliance.agents.openai_client import get_openai_client
+from compliance.agents.text_chunker import get_text_chunker
 from compliance.models import RuleType, Severity
 from compliance.agent_prompts.extraction_prompt import build_policy_extraction_prompt
+from common.config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class ExtractionAgent:
-    """Agent for extracting policy rules from compliance documents using Gemini LLM."""
+    """Agent for extracting policy rules from compliance documents using Azure OpenAI LLM."""
     
     def __init__(self, prompt_file: Optional[str] = None):
         """
@@ -25,12 +28,18 @@ class ExtractionAgent:
         Args:
             prompt_file: Path to the system prompt file (deprecated - kept for backward compatibility)
         """
-        self.gemini_client = get_gemini_client()
+        self.openai_client = get_openai_client()
+        self.text_chunker = get_text_chunker()
         # Note: We now use build_policy_extraction_prompt() function instead of loading from file
     
     async def extract_rules(self, document_text: str) -> list[dict]:
         """
-        Extract policy rules from compliance document text.
+        Extract policy rules from compliance document text with intelligent chunking.
+        
+        Automatically handles:
+        - Small documents: Single API call
+        - Large documents: Chunked into overlapping sections, processed in parallel
+        - Result aggregation: Merges and deduplicates rules from all chunks
         
         Args:
             document_text: Cleaned and concatenated text from compliance documents
@@ -52,23 +61,149 @@ class ExtractionAgent:
         if not document_text or not document_text.strip():
             raise ValueError("Document text cannot be empty")
         
-        # Truncate if too long (Gemini has token limits)
-        # Rough estimate: 1 token ≈ 4 characters, so 100k chars ≈ 25k tokens
-        max_length = 100000
-        if len(document_text) > max_length:
-            logger.warning(f"Document text truncated from {len(document_text)} to {max_length} characters")
-            document_text = document_text[:max_length] + "\n\n[Document truncated due to length...]"
+        logger.info(f"Starting extraction for document with {len(document_text)} characters")
         
         try:
-            # Build the prompt with document text injected
-            system_prompt = build_policy_extraction_prompt(document_text)
+            # Check if we need to chunk the document
+            if self.text_chunker.should_chunk(document_text):
+                logger.info("Document is large - using chunked extraction with parallel processing")
+                validated_rules = await self._extract_rules_chunked(document_text)
+            else:
+                logger.info("Document is small - using single extraction")
+                validated_rules = await self._extract_rules_single(document_text)
             
-            # Call Gemini API - pass empty string as prompt since document is in system_prompt
-            response_text = await self.gemini_client.generate_content(
-                prompt="",  # Document text is already in system_prompt
+            logger.info(f"Successfully extracted {len(validated_rules)} policy rules")
+            return validated_rules
+            
+        except Exception as e:
+            logger.error(f"Failed to extract rules: {str(e)}")
+            raise ValueError(f"Policy extraction failed: {str(e)}")
+    
+    async def _extract_rules_single(self, document_text: str) -> list[dict]:
+        """
+        Extract rules from a single document (no chunking).
+        
+        Args:
+            document_text: Document text to process
+            
+        Returns:
+            List of validated rule dictionaries
+        """
+        # Build the prompt with document text injected
+        system_prompt = build_policy_extraction_prompt(document_text)
+        
+        # Call OpenAI API
+        response_text = await self.openai_client.generate_content_with_retry(
+            prompt="Extract all compliance rules from the provided policy documents.",
+            system_instruction=system_prompt,
+            temperature=0.3,  # Lower temperature for more consistent extraction
+            max_tokens=4000,  # Allow enough tokens for comprehensive extraction
+            timeout=float(settings.EXTRACTION_TIMEOUT_PER_CHUNK),
+            use_json_mode=True,  # Use JSON mode for guaranteed valid JSON
+            max_retries=3
+        )
+        
+        # Parse JSON response
+        rules = self._parse_response(response_text)
+        
+        # Validate and normalize rules
+        validated_rules = self._validate_rules(rules)
+        
+        return validated_rules
+    
+    async def _extract_rules_chunked(self, document_text: str) -> list[dict]:
+        """
+        Extract rules from a large document using chunking and parallel processing.
+        
+        Args:
+            document_text: Large document text to process
+            
+        Returns:
+            List of validated and deduplicated rule dictionaries
+        """
+        # Split document into chunks
+        chunks = self.text_chunker.chunk_text(document_text)
+        logger.info(f"Split document into {len(chunks)} chunks for parallel processing")
+        
+        # Process chunks in parallel (with concurrency limit)
+        max_parallel = settings.EXTRACTION_MAX_PARALLEL
+        chunk_results = []
+        
+        # Process in batches to control concurrency
+        for i in range(0, len(chunks), max_parallel):
+            batch = chunks[i:i + max_parallel]
+            batch_indices = list(range(i, i + len(batch)))
+            
+            logger.info(f"Processing batch {i // max_parallel + 1}: chunks {batch_indices[0]}-{batch_indices[-1]}")
+            
+            # Create tasks for this batch
+            tasks = [
+                self._extract_rules_from_chunk(chunk_text, metadata, chunk_idx)
+                for chunk_idx, (chunk_text, metadata) in zip(batch_indices, batch)
+            ]
+            
+            # Wait for all tasks in batch to complete
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Handle results and errors
+            for chunk_idx, result in zip(batch_indices, batch_results):
+                if isinstance(result, Exception):
+                    logger.error(f"Chunk {chunk_idx} failed: {str(result)}")
+                    # Continue with other chunks - don't fail entire extraction
+                elif result:
+                    chunk_results.append(result)
+        
+        if not chunk_results:
+            raise ValueError("All chunks failed to extract rules")
+        
+        logger.info(f"Successfully processed {len(chunk_results)} chunks")
+        
+        # Merge and deduplicate results
+        merged_rules = self.text_chunker.merge_chunk_results(chunk_results)
+        
+        return merged_rules
+    
+    async def _extract_rules_from_chunk(
+        self, 
+        chunk_text: str, 
+        metadata: dict, 
+        chunk_idx: int
+    ) -> List[dict]:
+        """
+        Extract rules from a single chunk.
+        
+        Args:
+            chunk_text: Text of the chunk
+            metadata: Chunk metadata (index, position, etc.)
+            chunk_idx: Index of the chunk
+            
+        Returns:
+            List of validated rules from this chunk
+        """
+        try:
+            logger.info(
+                f"Processing chunk {chunk_idx} "
+                f"({metadata['chunk_index'] + 1}/{metadata['total_chunks']}): "
+                f"{len(chunk_text)} chars"
+            )
+            
+            # Build the prompt for this chunk
+            # Add context about chunking in the prompt
+            chunk_context = ""
+            if metadata['total_chunks'] > 1:
+                chunk_context = f"\n\nNOTE: This is chunk {metadata['chunk_index'] + 1} of {metadata['total_chunks']} from a larger document. Extract all rules from this section."
+            
+            system_prompt = build_policy_extraction_prompt(chunk_text + chunk_context)
+            
+            # Call OpenAI API for this chunk
+            response_text = await self.openai_client.generate_content_with_retry(
+                prompt="Extract all compliance rules from the provided policy document section.",
                 system_instruction=system_prompt,
-                temperature=0.3,  # Lower temperature for more consistent extraction
-                timeout=120.0  # 2 minutes timeout for large documents
+                temperature=0.3,
+                max_tokens=4000,
+                timeout=float(settings.EXTRACTION_TIMEOUT_PER_CHUNK),
+                use_json_mode=True,
+                max_retries=2  # Less retries for chunks to fail fast
             )
             
             # Parse JSON response
@@ -77,12 +212,13 @@ class ExtractionAgent:
             # Validate and normalize rules
             validated_rules = self._validate_rules(rules)
             
-            logger.info(f"Successfully extracted {len(validated_rules)} policy rules")
+            logger.info(f"Chunk {chunk_idx} extracted {len(validated_rules)} rules")
             return validated_rules
             
         except Exception as e:
-            logger.error(f"Failed to extract rules: {str(e)}")
-            raise ValueError(f"Policy extraction failed: {str(e)}")
+            logger.error(f"Failed to extract rules from chunk {chunk_idx}: {str(e)}")
+            # Re-raise to be caught by gather()
+            raise
     
     def _parse_response(self, response_text: str) -> list[dict]:
         """
