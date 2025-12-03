@@ -1,0 +1,198 @@
+COMPLIANCE POLICY DOCUMENT
+Customer Service & Support Division
+Version 1.0 – Internal Use Only
+
+INTRODUCTION
+This document outlines the mandatory customer-interaction, data-handling, operational, and professional conduct standards that all Customer Service Representatives (CSRs) must follow when engaging with customers through phone calls, chat, or any voice-based interaction. These policies apply to all employees, contractors, and temporary workers acting on behalf of the company.
+
+The goal of these policies is to ensure safe, trustworthy, compliant, and customer-first interactions that align with company values, data-protection practices, and legal obligations.
+
+------------------------------------------------------------------------
+SECTION 1 — CUSTOMER IDENTIFICATION & ACCOUNT VERIFICATION
+------------------------------------------------------------------------
+
+1.1 Mandatory Verification Steps
+Before accessing, modifying, or discussing any customer account details, the CSR must perform identity verification using at least two approved methods. Acceptable methods include:
+- Confirming the customer’s full name as it appears on the account.
+- Requesting the registered email or phone number (CSR must never disclose these fields first).
+- Asking for the last 3 characters of a stored address or partial postal code.
+CSR must not proceed with account-specific support until the verification is fully completed.
+
+1.2 Prohibited Verification Practices
+The CSR must not:
+- Reveal full account details before the customer has verified themselves.
+- Read out loud complete payment information, full addresses, or full phone numbers.
+- Accept unverifiable information such as “I remember ordering last week” as proof of identity.
+
+1.3 Exceptions
+Inquiries about general product information, shipping policies, or how-to instructions do not require identity verification.
+
+------------------------------------------------------------------------
+SECTION 2 — DATA PRIVACY, SECURITY & HANDLING OF PERSONAL INFORMATION
+------------------------------------------------------------------------
+
+2.1 Handling of Personal Data
+CSRs must handle customer data according to the following guidelines:
+- Only access the information required for resolving the issue.
+- Never store or record customer information outside approved systems.
+- Avoid repeating sensitive data unless absolutely necessary.
+- When reading data back to the customer, summarize rather than quote verbatim (e.g., “the order ending in 823”).
+
+2.2 Sensitive Information Restrictions
+The CSR must never request or record:
+- Full payment card numbers.
+- Complete bank account numbers.
+- Government-issued identification numbers.
+- Customer passwords, one-time security codes, or authentication tokens.
+
+2.3 Communication Channel Compliance
+When communicating sensitive account details, the CSR must:
+- Confirm that they are speaking with the correct customer.
+- Avoid discussing sensitive information over speakerphone if overhearing is likely.
+- Politely decline to provide personal information if another person speaks on behalf of the account owner without authorization.
+
+------------------------------------------------------------------------
+SECTION 3 — CUSTOMER COMMUNICATION STANDARDS
+------------------------------------------------------------------------
+
+3.1 Tone & Language Requirements
+The CSR must:
+- Maintain professional, clear, and respectful language.
+- Avoid sarcasm, slang, and accusatory tones.
+- Use empathetic statements when customers express frustration.
+- Provide concise answers without unnecessary technical details.
+
+3.2 Clarity & Transparency
+The CSR must clearly explain:
+- What actions they are taking in the system.
+- Expected timelines for refunds, replacements, or escalations.
+- Customers’ responsibilities (e.g., returning damaged items).
+- Any limitations due to policy, stock availability, or regional restrictions.
+
+3.3 Prohibited Communication Behaviors
+The CSR must not:
+- Guess or speculate about unavailable information.
+- Promise outcomes that cannot be guaranteed.
+- Mention internal workflows (e.g., “the system is slow” or “we are understaffed”).
+- Criticize other CSRs, the company, or partners.
+
+------------------------------------------------------------------------
+SECTION 4 — ORDER, REFUND & REPLACEMENT POLICIES
+------------------------------------------------------------------------
+
+4.1 Refund Eligibility Requirements
+Before initiating a refund, the CSR must confirm:
+- Order ownership through verification.
+- Item delivery status.
+- Refund eligibility based on product category (e.g., perishable, digital, high-value electronics).
+- Whether prior refunds have been issued for similar items.
+
+4.2 Replacement Process
+The CSR may initiate a replacement only if:
+- The product qualifies for replacement under warranty.
+- The customer reports damage, defect, or missing parts.
+- The customer provides necessary verification details (images may be required in some cases).
+
+4.3 Prohibited Refund Practices
+The CSR must not:
+- Manually override refund restrictions without authorization.
+- Provide refunds for third-party seller products unless the policy permits.
+- Issue courtesy refunds exceeding the allowed monthly threshold.
+- Offer refunds to non-account holders requesting them on behalf of someone else.
+
+------------------------------------------------------------------------
+SECTION 5 — DISCLOSURE & COMMUNICATION OF POLICIES
+------------------------------------------------------------------------
+
+5.1 Mandatory Policy Disclosures
+The CSR must inform customers of:
+- Return deadlines (e.g., 30 days from delivery).
+- Restocking fees when applicable.
+- Warranty limits for electronics, appliances, and high-value goods.
+
+5.2 Optional Policy Disclosures
+CSRs may provide additional clarification when helpful, such as:
+- Packaging requirements for return shipments.
+- How refund timelines vary by payment method.
+
+5.3 Forbidden Disclosures
+CSRs must not:
+- Provide internal policy documents.
+- Reveal back-end system notes or private investigation flags.
+- Disclose risk scores, fraud alerts, or security checks.
+
+------------------------------------------------------------------------
+SECTION 6 — PROFESSIONAL CONDUCT & BEHAVIOR
+------------------------------------------------------------------------
+
+6.1 Required Conduct
+The CSR must:
+- Remain calm even during difficult interactions.
+- Provide fact-based responses.
+- Offer alternative solutions when the preferred option is unavailable.
+- Document all actions taken during the call accurately.
+
+6.2 Escalations
+The CSR must escalate calls when:
+- The customer requests a supervisor.
+- The issue involves fraud, safety incidents, or legal concerns.
+- The customer repeatedly disputes policy explanations and requires managerial review.
+
+6.3 Prohibited Conduct
+CSRs must not:
+- Disconnect the call abruptly.
+- Argue with customers.
+- Provide personal opinions (e.g., “I think the seller is unreliable”).
+
+------------------------------------------------------------------------
+SECTION 7 — SHIPPING, DELIVERY & LOGISTICS COMMUNICATION
+------------------------------------------------------------------------
+
+7.1 Standard Shipping Information Rules
+CSRs must:
+- Confirm order location using the tracking ID.
+- Communicate expected delivery windows according to system data.
+- Avoid guaranteeing delivery dates unless the system specifies them.
+
+7.2 Handling Delayed Orders
+When an order is delayed, CSRs must:
+- Acknowledge the inconvenience.
+- Provide a clear explanation from system logs.
+- Offer next steps such as replacement, refund, or further tracking.
+
+7.3 Prohibited Shipping Claims
+CSRs must not:
+- State the courier “lost the package” unless officially confirmed.
+- Provide tracking information that doesn’t appear in the system.
+- Suggest customers contact shipping carriers directly unless the policy mandates it.
+
+------------------------------------------------------------------------
+SECTION 8 — FRAUD PREVENTION & SECURITY PRACTICES
+------------------------------------------------------------------------
+
+8.1 Suspicious Activity Handling
+CSRs must document and escalate when:
+- Multiple high-value items are repeatedly refunded or reported missing.
+- Customers request account changes without verification.
+- System alerts indicate potential fraud indicators.
+
+8.2 Prohibited Behaviors Regarding Fraud
+The CSR must never:
+- Accuse a customer of fraud directly.
+- Reveal internal fraud-detection mechanisms.
+- Disable fraud flags without authorization.
+
+------------------------------------------------------------------------
+SECTION 9 — CALL CLOSURE REQUIREMENTS
+------------------------------------------------------------------------
+
+Before ending the call, CSRs must:
+- Confirm that all issues raised by the customer have been addressed.
+- Summarize resolutions (refund initiated, replacement shipped, investigation opened).
+- Provide any required next steps.
+- Offer additional assistance ("Is there anything else I can help you with today?").
+- End with a courteous closing statement.
+
+------------------------------------------------------------------------
+END OF DOCUMENT
+------------------------------------------------------------------------
