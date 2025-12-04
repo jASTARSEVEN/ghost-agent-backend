@@ -18,6 +18,8 @@ engine = create_engine(
     echo=False,
     pool_pre_ping=True,
     pool_recycle=1800,
+    # pool_size=3,  # Reduced from default to avoid exhausting connections
+    # max_overflow=5,  # Reduced overflow
     connect_args={"options": "-csearch_path=testdb"},
 )
 
