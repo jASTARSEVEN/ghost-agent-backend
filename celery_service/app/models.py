@@ -9,7 +9,7 @@ class EventModel(Base):
     __tablename__ = "conversation_events"
     __table_args__ = (
         Index("idx_user_conversation", "user_id", "conversation_id"),
-        {"schema": "ghostagent"},
+        {"schema": "testdb"},
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
