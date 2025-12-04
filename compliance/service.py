@@ -15,7 +15,7 @@ from compliance.models import (
 )
 
 from compliance.schemas import PolicySetCreate, RuleCreate, RuleUpdate
-from compliance.utils import save_uploaded_file, extract_text_from_file, clean_and_concatenate_text
+from compliance.utils import save_uploaded_file, extract_text_from_file, clean_and_concatenate_text, extract_text_from_upload
 from compliance.agents.extraction_agent import ExtractionAgent
 
 from common.response_handler import ResponseHandler
@@ -175,6 +175,100 @@ async def extract_rules_from_documents(
     return {"rules_extracted": len(extracted_rules), "rules_saved": saved_count}
 
 
+# -------------------- EXTRACT RULES FROM UPLOADS (IN-MEMORY) --------------------
+
+async def extract_rules_from_uploads(
+    db: AsyncSession, 
+    policy_set_id: int, 
+    user_id: int,
+    files: List[UploadFile] | None = None,
+    raw_text: str | None = None
+):
+    """
+    Extract policy rules from uploaded files (in-memory) and/or raw text using Azure OpenAI LLM.
+    Does NOT save files to disk or create document records.
+    
+    Args:
+        db: Database session
+        policy_set_id: ID of the policy set
+        user_id: ID of the user performing extraction
+        files: Optional list of uploaded files to process in-memory
+        raw_text: Optional raw text to include in extraction
+        
+    Returns:
+        Dictionary with extraction results: {"rules_extracted": int, "rules_saved": int}
+        
+    Raises:
+        ValueError: If extraction fails or no files/text found
+    """
+    extracted_texts = []
+    
+    # Extract text from uploaded files (in-memory)
+    if files:
+        for file in files:
+            try:
+                text = await extract_text_from_upload(file)
+                extracted_texts.append(text)
+            except Exception as e:
+                # Log error but continue with other files
+                print(f"Warning: Failed to extract text from {file.filename}: {str(e)}")
+                continue
+    
+    # Add raw text if provided
+    if raw_text and raw_text.strip():
+        extracted_texts.append(raw_text.strip())
+    
+    # Validate that we have at least one text source
+    if not extracted_texts:
+        raise ValueError("No extractable text found in files or raw text")
+    
+    # Clean and concatenate all extracted text
+    all_text = clean_and_concatenate_text(extracted_texts)
+    
+    if not all_text or not all_text.strip():
+        raise ValueError("No extractable text found after cleaning")
+
+    # Extract rules using Azure OpenAI LLM
+    try:
+        extraction_agent = ExtractionAgent()
+        extracted_rules = await extraction_agent.extract_rules(all_text)
+    except Exception as e:
+        error_msg = f"Failed to extract rules: {str(e)}"
+        print(f"Extraction error: {error_msg}")
+        raise ValueError(error_msg)
+
+    if not extracted_rules:
+        raise ValueError("No rules could be extracted from the provided content")
+
+    # Save rules to database
+    saved_count = 0
+    for rule in extracted_rules:
+        try:
+            new_rule = ComplianceRule(
+                policy_set_id=policy_set_id,
+                category=rule["category"],
+                rule_type=RuleType(rule["rule_type"]),
+                title=rule["title"],
+                description=rule["description"],
+                severity=Severity(rule["severity"]),
+                ai_generated=True,
+                example_snippets=rule.get("example_snippets", []),
+                created_by=user_id,
+            )
+            db.add(new_rule)
+            saved_count += 1
+        except Exception as e:
+            # Log error but continue with other rules
+            print(f"Warning: Failed to save rule '{rule.get('title', 'unknown')}': {str(e)}")
+            continue
+
+    if saved_count == 0:
+        raise ValueError("Failed to save any rules to database")
+
+    await db.commit()
+    return {"rules_extracted": len(extracted_rules), "rules_saved": saved_count}
+
+
 # -------------------- GET POLICY SET + RULES --------------------
 
 async def get_policy_set_with_rules(db: AsyncSession, policy_set_id: int):
@@ -217,8 +311,8 @@ async def create_rule(db: AsyncSession, policy_set_id: int, payload: RuleCreate,
     
     if not policy_set:
         raise ValueError("Policy set not found")
-    
-    if policy_set.status != PolicySetStatus.draft:
+    #also allow to create rules in archived policy sets
+    if policy_set.status != PolicySetStatus.draft and policy_set.status != PolicySetStatus.archived:
         raise ValueError("Rules can only be added to draft policy sets")
     
     # Create the new rule
