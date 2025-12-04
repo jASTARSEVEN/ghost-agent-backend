@@ -14,7 +14,7 @@ from compliance.models import (
     Severity
 )
 
-from compliance.schemas import PolicySetCreate, RuleUpdate
+from compliance.schemas import PolicySetCreate, RuleCreate, RuleUpdate
 from compliance.utils import save_uploaded_file, extract_text_from_file, clean_and_concatenate_text
 from compliance.agents.extraction_agent import ExtractionAgent
 
@@ -191,6 +191,55 @@ async def get_policy_set_with_rules(db: AsyncSession, policy_set_id: int):
         "policy_set": policy_set,
         "rules": rules
     }
+
+
+# -------------------- CREATE RULE --------------------
+
+async def create_rule(db: AsyncSession, policy_set_id: int, payload: RuleCreate, user_id: int):
+    """
+    Manually create a compliance rule for a policy set.
+    
+    Args:
+        db: Database session
+        policy_set_id: ID of the policy set to add the rule to
+        payload: Rule creation data
+        user_id: ID of the user creating the rule
+        
+    Returns:
+        The created rule object
+        
+    Raises:
+        ValueError: If policy set not found or is not in draft status
+    """
+    # Check if policy set exists and is in draft status
+    stmt = select(CompliancePolicySet).where(CompliancePolicySet.id == policy_set_id)
+    policy_set = (await db.execute(stmt)).scalar_one_or_none()
+    
+    if not policy_set:
+        raise ValueError("Policy set not found")
+    
+    if policy_set.status != PolicySetStatus.draft:
+        raise ValueError("Rules can only be added to draft policy sets")
+    
+    # Create the new rule
+    new_rule = ComplianceRule(
+        policy_set_id=policy_set_id,
+        category=payload.category,
+        rule_type=payload.rule_type,
+        title=payload.title,
+        description=payload.description,
+        severity=payload.severity,
+        enabled=payload.enabled,
+        ai_generated=False,  # Manually created, not AI-generated
+        example_snippets=payload.example_snippets,
+        created_by=user_id,
+    )
+    
+    db.add(new_rule)
+    await db.commit()
+    await db.refresh(new_rule)
+    
+    return new_rule
 
 
 # -------------------- UPDATE RULE --------------------

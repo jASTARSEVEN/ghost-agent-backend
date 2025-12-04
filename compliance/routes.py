@@ -8,6 +8,7 @@ from compliance.service import (
     upload_policy_document,
     extract_rules_from_documents,
     get_policy_set_with_rules,
+    create_rule,
     update_rule,
     finalize_policy_set,
     get_all_policy_sets
@@ -17,7 +18,9 @@ from compliance.schemas import (
     PolicySetCreate,
     PolicySetOut,
     PolicySetListItem,
+    RuleCreate,
     RuleUpdate,
+    RuleOut,
     DocumentOut,
     PolicyExtractionRequest,
     ExtractionResponse,
@@ -155,6 +158,30 @@ async def get_policy_set(
 ):
     data = await get_policy_set_with_rules(db, policy_set_id)
     return ResponseHandler.ok("Policy set fetched", data)
+
+
+# -------------------- CREATE RULE --------------------
+
+@router.post("/policy-sets/{policy_set_id}/rules", response_model=RuleOut)
+async def add_rule(
+    policy_set_id: int,
+    payload: RuleCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission("compliance.rules.create"))
+):
+    """
+    Manually create a compliance rule for a policy set.
+    
+    The policy set must be in draft status to add rules.
+    Rules created through this endpoint are marked as manually created (not AI-generated).
+    """
+    try:
+        rule = await create_rule(db, policy_set_id, payload, user.id)
+        return ResponseHandler.created("Rule created successfully", rule)
+    except ValueError as e:
+        return ResponseHandler.bad_request(str(e))
+    except Exception as e:
+        return ResponseHandler.bad_request(f"Failed to create rule: {str(e)}")
 
 
 # -------------------- UPDATE RULE --------------------

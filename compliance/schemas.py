@@ -75,6 +75,29 @@ class RuleOut(BaseModel):
         from_attributes = True
 
 
+class RuleCreate(BaseModel):
+    category: Optional[str] = Field(None, description="Category of the rule (e.g., 'Security', 'Data Privacy')")
+    rule_type: RuleType = Field(..., description="Type of rule: 'do' or 'dont'")
+    title: str = Field(..., min_length=1, max_length=255, description="Title of the rule")
+    description: Optional[str] = Field(None, description="Detailed description of the rule")
+    severity: Severity = Field(default=Severity.info, description="Severity level of the rule")
+    enabled: bool = Field(default=True, description="Whether the rule is enabled")
+    example_snippets: Optional[List[str]] = Field(default=None, description="Example code snippets demonstrating the rule")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "category": "Security",
+                "rule_type": "dont",
+                "title": "Do not hardcode API keys in source code",
+                "description": "API keys, secrets, and credentials should never be hardcoded in the source code. Use environment variables or secure secret management systems.",
+                "severity": "critical",
+                "enabled": True,
+                "example_snippets": ["api_key = 'sk-1234567890abcdef'", "password = 'admin123'"]
+            }
+        }
+
+
 class RuleUpdate(BaseModel):
     category: Optional[str]
     rule_type: Optional[RuleType]
