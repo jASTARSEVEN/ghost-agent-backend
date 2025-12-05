@@ -2,17 +2,17 @@ import os
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import redis
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, FastAPI, HTTPException, status
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, FastAPI, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 
 from chat.socket import Connection, room_manager
 from chat.models import EventModel
-# from chat.dependencies import get_db
 from authentication.models import User
+from authentication.utils import decode_token
 from common.dependencies import get_db, require_permission
 
 
@@ -26,10 +26,10 @@ QUEUE_NAME = os.getenv("EVENT_QUEUE_NAME", "event_queue")
 try:
     redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
     redis_client.ping()
-    print(f"\n Redis connected successfully at: {REDIS_URL}\n")
+    log.info(f"Redis connected successfully at: {REDIS_URL}")
 except Exception as e:
     redis_client = None
-    print(f"\n❌ REDIS CONNECTION FAILED: {REDIS_URL}\nError: {e}\n")
+    log.error(f"REDIS CONNECTION FAILED: {REDIS_URL}, Error: {e}")
 
 
 #  Optional function you can call on FastAPI startup
@@ -37,16 +37,39 @@ def init_redis_check():
     if redis_client:
         try:
             redis_client.ping()
-            print(f"Redis connection verified")
+            log.info("Redis connection verified")
         except Exception as e:
-            print(f"❌Redis lost connection: {e}")
+            log.error(f"Redis lost connection: {e}")
     else:
-        print(" Redis client not initialized!")
+        log.warning("Redis client not initialized!")
 
 
 # -------- WEBSOCKET ENDPOINT --------
 @router.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str, role: str):
+async def websocket_endpoint(
+    websocket: WebSocket, 
+    user_id: str,
+    token: str = Query(...),
+    role: str = Query("user")
+):
+    """WebSocket endpoint with authentication
+    
+    Connect with: ws://host/ws/{user_id}?token={jwt_token}&role={role}
+    Token must be valid JWT and user_id must match token payload
+    """
+    # Validate token before accepting connection
+    try:
+        payload = decode_token(token)
+        # Support both "sub" (JWT standard) and "user_id" (backward compatibility)
+        token_user_id = str(payload.get("sub") or payload.get("user_id"))
+        if token_user_id != user_id:
+            await websocket.close(code=1008, reason="Unauthorized: user_id mismatch")
+            return
+    except Exception as e:
+        log.error(f"WebSocket authentication failed: {e}")
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+    
     await websocket.accept()
 
     conn = Connection(websocket, user_id, role)
@@ -73,7 +96,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, role: str):
 
             msg["user_id"] = user_id
             if "received_at" not in msg:
-                msg["received_at"] = datetime.utcnow().isoformat()
+                msg["received_at"] = datetime.now(timezone.utc).isoformat()
 
             # Health check ping
             if msg.get("event_type") == "health_ping":
@@ -84,12 +107,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, role: str):
             if redis_client:
                 try:
                     redis_client.lpush(QUEUE_NAME, json.dumps(msg))
-                    print(f"Redis LPUSH success -> {QUEUE_NAME}")
+                    log.debug(f"Redis LPUSH success -> {QUEUE_NAME}")
                 except redis.exceptions.ConnectionError as e:
-                    print(f" Redis push error: {e}")
+                    log.error(f"Redis push error: {e}")
                     msg["error"] = "redis_unavailable"
             else:
-                print("Redis not connected, message NOT queued!")
+                log.warning("Redis not connected, message NOT queued!")
 
             # Broadcast message to WebSocket room
             await room_manager.broadcast(user_id, msg)
@@ -246,8 +269,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, role: str):
 async def get_all_conversations(
     user: User = Depends(require_permission("*")),
     db: AsyncSession = Depends(get_db),
-    limit: int = 100,
-    offset: int = 0
+    limit: int = Query(100, ge=1, le=1000),  # Max 1000
+    offset: int = Query(0, ge=0, le=100000)  # Max 100k offset
 ):
     """
     Get all conversations for the current user.
@@ -292,8 +315,8 @@ async def get_all_conversations(
 async def get_all_formatted_conversations(
     user: User = Depends(require_permission("*")),
     db: AsyncSession = Depends(get_db),
-    limit: int = 50,
-    offset: int = 0
+    limit: int = Query(50, ge=1, le=500),  # Max 500
+    offset: int = Query(0, ge=0, le=100000)  # Max 100k offset
 ):
     """
     Returns formatted conversations without the N+1 query problem.
@@ -398,8 +421,8 @@ async def get_messages(
     conversation_id: str,
     user: User = Depends(require_permission("*")),
     db: AsyncSession = Depends(get_db),
-    limit: int = 1000,
-    offset: int = 0
+    limit: int = Query(1000, ge=1, le=10000),  # Max 10k
+    offset: int = Query(0, ge=0, le=100000)  # Max 100k offset
 ):
     """
     Get messages for a specific conversation (optimized).

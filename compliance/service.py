@@ -1,9 +1,10 @@
 import os
 import uuid
+import logging
 from typing import List, Optional
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, insert
 
 from compliance.models import (
     CompliancePolicySet,
@@ -19,6 +20,8 @@ from compliance.utils import save_uploaded_file, extract_text_from_file, clean_a
 from compliance.agents.extraction_agent import ExtractionAgent
 
 from common.response_handler import ResponseHandler
+
+logger = logging.getLogger(__name__)
 
 
 UPLOAD_DIR = "uploads/compliance"
@@ -111,8 +114,7 @@ async def extract_rules_from_documents(
             extracted_texts.append(text)
         except Exception as e:
             # Log error but continue with other documents
-            # In production, you might want to log this properly
-            print(f"Warning: Failed to extract text from {doc.file_name}: {str(e)}")
+            logger.warning(f"Failed to extract text from {doc.file_name}: {str(e)}")
             continue
     
     # Add raw text if provided
@@ -140,7 +142,7 @@ async def extract_rules_from_documents(
         extracted_rules = await extraction_agent.extract_rules(all_text)
     except Exception as e:
         error_msg = f"Failed to extract rules from documents: {str(e)}"
-        print(f"Extraction error: {error_msg}")
+        logger.error(f"Extraction error: {error_msg}")
         raise ValueError(error_msg)
 
     if not extracted_rules:
@@ -165,7 +167,7 @@ async def extract_rules_from_documents(
             saved_count += 1
         except Exception as e:
             # Log error but continue with other rules
-            print(f"Warning: Failed to save rule '{rule.get('title', 'unknown')}': {str(e)}")
+            logger.warning(f"Failed to save rule '{rule.get('title', 'unknown')}': {str(e)}")
             continue
 
     if saved_count == 0:
@@ -211,7 +213,7 @@ async def extract_rules_from_uploads(
                 extracted_texts.append(text)
             except Exception as e:
                 # Log error but continue with other files
-                print(f"Warning: Failed to extract text from {file.filename}: {str(e)}")
+                logger.warning(f"Failed to extract text from {file.filename}: {str(e)}")
                 continue
     
     # Add raw text if provided
@@ -234,38 +236,44 @@ async def extract_rules_from_uploads(
         extracted_rules = await extraction_agent.extract_rules(all_text)
     except Exception as e:
         error_msg = f"Failed to extract rules: {str(e)}"
-        print(f"Extraction error: {error_msg}")
+        logger.error(f"Extraction error: {error_msg}")
         raise ValueError(error_msg)
 
     if not extracted_rules:
         raise ValueError("No rules could be extracted from the provided content")
 
-    # Save rules to database
-    saved_count = 0
+    # Save rules to database using bulk operations
+    rules_to_add = []
     for rule in extracted_rules:
         try:
-            new_rule = ComplianceRule(
-                policy_set_id=policy_set_id,
-                category=rule["category"],
-                rule_type=RuleType(rule["rule_type"]),
-                title=rule["title"],
-                description=rule["description"],
-                severity=Severity(rule["severity"]),
-                ai_generated=True,
-                example_snippets=rule.get("example_snippets", []),
-                created_by=user_id,
-            )
-            db.add(new_rule)
-            saved_count += 1
+            rules_to_add.append({
+                "policy_set_id": policy_set_id,
+                "category": rule["category"],
+                "rule_type": RuleType(rule["rule_type"]),
+                "title": rule["title"],
+                "description": rule["description"],
+                "severity": Severity(rule["severity"]),
+                "ai_generated": True,
+                "example_snippets": rule.get("example_snippets", []),
+                "created_by": user_id,
+            })
         except Exception as e:
-            # Log error but continue with other rules
-            print(f"Warning: Failed to save rule '{rule.get('title', 'unknown')}': {str(e)}")
+            logger.warning(f"Error preparing rule '{rule.get('title', 'unknown')}': {str(e)}")
             continue
 
-    if saved_count == 0:
-        raise ValueError("Failed to save any rules to database")
+    if not rules_to_add:
+        raise ValueError("Failed to prepare any rules for database")
 
-    await db.commit()
+    # Bulk insert
+    try:
+        await db.execute(insert(ComplianceRule), rules_to_add)
+        await db.commit()
+        saved_count = len(rules_to_add)
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to save rules to database: {str(e)}")
+        raise ValueError(f"Failed to save rules to database: {str(e)}")
+
     return {"rules_extracted": len(extracted_rules), "rules_saved": saved_count}
 
 

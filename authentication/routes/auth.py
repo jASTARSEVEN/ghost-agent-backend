@@ -22,7 +22,6 @@ from authentication.utils import (
     create_refresh_token,
     decode_token,
 )
-from common.dependencies import get_db, require_authenticated_user
 from common.response_handler import ResponseHandler
 from common.config import settings
 
@@ -87,9 +86,9 @@ async def login(
     # Update last login
     user.last_login = datetime.now(timezone.utc)
 
-    # Create tokens with user_id in payload (matching your structure)
-    access_token = create_access_token({"user_id": user.id})
-    refresh_token = create_refresh_token({"user_id": user.id})
+    # Create tokens with standardized "sub" payload (JWT standard)
+    access_token = create_access_token({"sub": str(user.id)})
+    refresh_token = create_refresh_token({"sub": str(user.id)})
     
     # Calculate expiry
     access_token_expiry = datetime.now(timezone.utc) + timedelta(
@@ -151,7 +150,8 @@ async def refresh_access_token(
     # Decode refresh token
     try:
         payload = decode_token(refresh_data.refresh_token)
-        user_id = payload.get("sub")
+        # Support both "sub" (JWT standard) and "user_id" (backward compatibility)
+        user_id = payload.get("sub") or payload.get("user_id")
         if not user_id:
             return ResponseHandler.unauthorized(message="Invalid token")
     except HTTPException:

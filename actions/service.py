@@ -1,10 +1,12 @@
 # actions/service.py
+import logging
 from sqlalchemy import text
 from actions.db import engine
 from actions.schemas import RefundRequest
-import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from chat.socket import room_manager
+
+logger = logging.getLogger(__name__)
 
 async def process_refund_request(data, csr_id: int):
     try:
@@ -61,11 +63,14 @@ async def process_refund_request(data, csr_id: int):
                 f"CSR ACTION : REFUND ACCEPT Refund of {data.currency} {data.amount:.2f} "
                 f"initiated for Order {data.order_number}"
             ),
-            "timestamp" : datetime.utcnow().isoformat() + "Z"
+            "timestamp" : datetime.now(timezone.utc).isoformat()
         }
 
-        print(f"Broadcasting refund accept context update to CSR ID:{csr_id}")
-        await room_manager.broadcast(str(csr_id), contextual_update)
+        logger.info(f"Broadcasting refund accept context update to CSR ID:{csr_id}")
+        try:
+            await room_manager.broadcast(str(csr_id), contextual_update)
+        except Exception as e:
+            logger.error(f"Failed to broadcast message: {e}")
         
         return {
             "status": "success",
@@ -128,11 +133,13 @@ async def deny_refund_request(data, csr_id: int):
                 f"CSR ACTION : REFUND DENY Refund denied for order {data.order_number}. "
                 f"Reason: {data.policy_notes or 'Refund outside policy guidelines.'}"
             ),
-            "timestamp" : datetime.utcnow().isoformat() + "Z"
+            "timestamp" : datetime.now(timezone.utc).isoformat()
         }
 
-        asyncio.create_task(
-            room_manager.broadcast(str(csr_id), contextual_update))
+        try:
+            await room_manager.broadcast(str(csr_id), contextual_update)
+        except Exception as e:
+            logger.error(f"Failed to broadcast message: {e}")
 
         return {
             "status": "success",

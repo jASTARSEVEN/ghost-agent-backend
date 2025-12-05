@@ -136,14 +136,13 @@ SEVERITY_ENUM = Enum(
 
 class CompliancePolicySet(Base):
     __tablename__ = "compliance_policy_sets"
-   
 
     id = Column(Integer, primary_key=True)
     version = Column(Integer, nullable=False)
-    status = Column(STATUS_ENUM, default=PolicySetStatus.draft)
+    status = Column(STATUS_ENUM, default=PolicySetStatus.draft, index=True)  # Add index
     name = Column(String(255), nullable=True)
 
-    created_by = Column(Integer, ForeignKey("users.id"))
+    created_by = Column(Integer, ForeignKey("users.id"), index=True)  # Add index
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

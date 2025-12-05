@@ -1,9 +1,11 @@
 import os
+import logging
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from .db_base import Base
 
+logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Use sync Postgres (not asyncpg)
@@ -18,8 +20,8 @@ engine = create_engine(
     echo=False,
     pool_pre_ping=True,
     pool_recycle=1800,
-    # pool_size=3,  # Reduced from default to avoid exhausting connections
-    # max_overflow=5,  # Reduced overflow
+    pool_size=5,  # Appropriate for Celery workers
+    max_overflow=10,
     connect_args={"options": "-csearch_path=testdb"},
 )
 
@@ -47,11 +49,11 @@ def save_many_events(events: list):
             session.add(row)
 
         session.commit()
-        print(f" [CELERY] Saved {len(events)} events")
+        logger.info(f"Saved {len(events)} events")
 
     except Exception as e:
         session.rollback()
-        print(f" [CELERY] DB Error:", e)
+        logger.error(f"DB Error: {e}", exc_info=True)
 
     finally:
         session.close()

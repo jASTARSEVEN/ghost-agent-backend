@@ -75,8 +75,8 @@ class UserToken(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     refresh_token = Column(String, unique=True, nullable=False, index=True)
     access_token = Column(String, unique=True, nullable=False, index=True)
-    access_token_expiry = Column(DateTime(timezone=True), nullable=False)
-    is_revoked = Column(Boolean, default=False)
+    access_token_expiry = Column(DateTime(timezone=True), nullable=False, index=True)  # Add index
+    is_revoked = Column(Boolean, default=False, index=True)  # Add index
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

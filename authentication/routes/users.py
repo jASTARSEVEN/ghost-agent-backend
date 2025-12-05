@@ -23,7 +23,7 @@ async def list_users(
     """List all users - requires 'user.list' permission"""
     stmt = select(User).options(
         selectinload(User.roles).selectinload(Role.permissions)
-    ).offset(skip).limit(limit)
+    ).order_by(User.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(stmt)
     users = result.scalars().all()
 
@@ -152,7 +152,8 @@ async def delete_user(
     if not user:
         return ResponseHandler.not_found(message="User not found")
 
-    await db.delete(user)
+    from sqlalchemy import delete
+    await db.execute(delete(User).where(User.id == user_id))
     await db.commit()
 
     return ResponseHandler.ok(message="User deleted successfully")
@@ -244,12 +245,14 @@ async def bulk_update_user_status(
             message=f"Some user IDs not found: {list(missing_ids)}"
         )
 
-    # Update 'is_active' status
-    for user in users:
-        user.is_active = payload.is_active
-
+    # Use bulk update for better performance
+    from sqlalchemy import update
+    stmt = update(User).where(
+        User.id.in_(payload.ids)
+    ).values(is_active=payload.is_active)
+    
+    result = await db.execute(stmt)
     await db.commit()
-    await db.refresh(users[0])  # refresh one example user if needed
 
     return ResponseHandler.ok(
         message=f"Updated is_active={payload.is_active} for {len(users)} user(s)",

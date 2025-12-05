@@ -1,3 +1,4 @@
+import logging
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from authentication.models import User, UserToken, Role
 from database import get_db
 from authentication.utils import decode_token
 
+logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 
@@ -21,7 +23,8 @@ async def get_current_user_from_token(
 
     # Decode token
     payload = decode_token(token)
-    user_id = payload.get("user_id")
+    # Support both "sub" (JWT standard) and "user_id" (backward compatibility)
+    user_id = payload.get("sub") or payload.get("user_id")
     if not user_id:
         return None
 
@@ -32,7 +35,7 @@ async def get_current_user_from_token(
     )
     result = await db.execute(stmt)
     token_record = result.scalar_one_or_none()
-    print(f'Token record found: {token_record}')
+    logger.debug(f'Token record found: {token_record is not None}')
     
     if not token_record:
         raise HTTPException(
@@ -47,7 +50,7 @@ async def get_current_user_from_token(
     
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
-    print(f'User fetched from DB: {user}')
+    logger.debug(f'User fetched from DB: {user is not None}')
 
     return user if user and user.is_active else None
 

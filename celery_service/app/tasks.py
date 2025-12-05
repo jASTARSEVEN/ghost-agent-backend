@@ -1,12 +1,13 @@
 import os
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from celery import shared_task
 from app.redis_client import redis_client
 from app.database import SessionLocal
 from app.models import EventModel
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+import redis.exceptions
 
 # Configuration from environment
 QUEUE = os.getenv("EVENT_QUEUE_NAME", "event_queue")
@@ -31,16 +32,27 @@ def save_events_batch(batch_size: int = BATCH_SIZE):
     saved, failed = 0, 0
 
     # 1) Pull events from Redis
-    for _ in range(batch_size):
-        item = r.rpop(QUEUE)
-        if not item:
-            break
-        try:
-            events.append(json.loads(item))
-        except json.JSONDecodeError:
-            logger.warning(f"Malformed event data: {item}, sending to DLQ")
-            r.lpush(DLQ, item)
-            failed += 1
+    try:
+        for _ in range(batch_size):
+            try:
+                item = r.rpop(QUEUE)
+                if not item:
+                    break
+                try:
+                    events.append(json.loads(item))
+                except json.JSONDecodeError:
+                    logger.warning(f"Malformed event data: {item}, sending to DLQ")
+                    try:
+                        r.lpush(DLQ, item)
+                        failed += 1
+                    except redis.exceptions.RedisError as re:
+                        logger.error(f"Failed to send to DLQ: {re}")
+            except redis.exceptions.RedisError as re:
+                logger.error(f"Redis connection error: {re}")
+                break  # Stop processing if Redis is down
+    except redis.exceptions.RedisError as re:
+        logger.error(f"Redis connection error: {re}")
+        return {"saved": 0, "failed": 0}
 
     if not events:
         logger.info("No events to process.")
@@ -63,9 +75,9 @@ def save_events_batch(batch_size: int = BATCH_SIZE):
                     try:
                         received_at = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
                     except Exception:
-                        received_at = datetime.utcnow()
+                        received_at = datetime.now(timezone.utc)
                 else:
-                    received_at = datetime.utcnow()
+                    received_at = datetime.now(timezone.utc)
 
                 records.append(
                     {
@@ -90,6 +102,24 @@ def save_events_batch(batch_size: int = BATCH_SIZE):
         db.commit()
         saved = len(records)
         logger.info(f"✅ Saved {saved} events to DB (schema: testdb)")
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"Integrity error: {e}", exc_info=True)
+        for event in events:
+            try:
+                r.lpush(DLQ, json.dumps(event))
+            except Exception:
+                pass
+        failed = len(events)
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"DB error: {e}", exc_info=True)
+        for event in events:
+            try:
+                r.lpush(DLQ, json.dumps(event))
+            except Exception:
+                pass
+        failed = len(events)
     except Exception as e:
         logger.error(f"Unexpected error in save_events_batch: {e}", exc_info=True)
         db.rollback()
@@ -98,18 +128,6 @@ def save_events_batch(batch_size: int = BATCH_SIZE):
                 r.lpush(DLQ, json.dumps(event))
             except Exception:
                 pass
-        failed = len(events)
-    except IntegrityError as e:
-        db.rollback()
-        logger.error(f"Integrity error: {e}")
-        for event in events:
-            r.lpush(DLQ, json.dumps(event))
-        failed = len(events)
-    except SQLAlchemyError as e:
-        db.rollback()
-        logger.error(f"DB error: {e}")
-        for event in events:
-            r.lpush(DLQ, json.dumps(event))
         failed = len(events)
     finally:
         db.close()
