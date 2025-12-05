@@ -24,3 +24,5 @@ alembic/versions/__pycache__/
 .vscode/
 .idea/
 .cursor/
+
+celery_service/celerybeat-schedule

@@ -1,6 +1,9 @@
 """
 Gemini API client for async LLM operations.
 Provides a wrapper around Google's Gemini API for policy extraction.
+This file is deprecated and will be removed in the future.
+It is kept here for backward compatibility.
+We are using Azure OpenAI instead.
 """
 import asyncio
 import logging

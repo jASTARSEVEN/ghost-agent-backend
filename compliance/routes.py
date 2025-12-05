@@ -5,9 +5,9 @@ from typing import List, Optional
 
 from compliance.service import (
     create_draft_policy_set,
-    upload_policy_document,
-    extract_rules_from_documents,
+    extract_rules_from_uploads,
     get_policy_set_with_rules,
+    create_rule,
     update_rule,
     finalize_policy_set,
     get_all_policy_sets
@@ -17,13 +17,13 @@ from compliance.schemas import (
     PolicySetCreate,
     PolicySetOut,
     PolicySetListItem,
+    RuleCreate,
     RuleUpdate,
+    RuleOut,
     DocumentOut,
     PolicyExtractionRequest,
     ExtractionResponse,
 )
-
-from compliance.models import CompliancePolicyDocument
 
 from common.dependencies import require_permission, get_db
 from authentication.models import User
@@ -60,23 +60,6 @@ async def create_policy_set(
     return ResponseHandler.created("Draft policy set created", policy_set)
 
 
-# -------------------- UPLOAD DOCUMENTS --------------------
-
-@router.post("/policy-sets/{policy_set_id}/documents")
-async def upload_documents(
-    policy_set_id: int,
-    files: List[UploadFile] = File(...),
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_permission("compliance.documents.upload"))
-):
-    docs = []
-    for file in files:
-        doc = await upload_policy_document(db, policy_set_id, file, user.id)
-        docs.append(doc)
-
-    return ResponseHandler.created("Documents uploaded", docs)
-
-
 # -------------------- EXTRACT RULES FROM DOCUMENTS --------------------
 
 @router.post(
@@ -91,48 +74,29 @@ async def extract_rules(
     user: User = Depends(require_permission("compliance.extract.run"))
 ):
     """
-    Extract policy rules from uploaded documents and/or raw text using AI.
+    Extract policy rules from uploaded files and/or raw text using AI.
     
-    Supports:
-    - Extracting from previously uploaded documents (if files not provided)
-    - Uploading new files during extraction (if files provided)
-    - Including raw text (if raw_text provided)
-    - Combining all sources: existing documents + new files + raw text
+    Files are processed in-memory and NOT stored on disk.
+    Only the extracted rules are saved to the database.
     
-    At least one source must be provided (existing documents, new files, or raw_text).
+    At least one source must be provided (files or raw_text).
     """
     # Validate that at least one source is provided
     has_files = files and len(files) > 0
     has_raw_text = raw_text and raw_text.strip()
     
-    # Check if there are existing documents
-    stmt = select(CompliancePolicyDocument).where(
-        CompliancePolicyDocument.policy_set_id == policy_set_id
-    )
-    existing_docs = (await db.execute(stmt)).scalars().all()
-    has_existing_docs = len(existing_docs) > 0
-    
-    if not has_files and not has_raw_text and not has_existing_docs:
+    if not has_files and not has_raw_text:
         return ResponseHandler.bad_request(
-            "At least one source is required: upload files, provide raw_text, or ensure documents are already uploaded"
+            "At least one source is required: upload files or provide raw_text"
         )
     
-    # Upload new files if provided
-    if has_files:
-        for file in files:
-            try:
-                await upload_policy_document(db, policy_set_id, file, user.id)
-            except Exception as e:
-                return ResponseHandler.bad_request(
-                    f"Failed to upload file {file.filename}: {str(e)}"
-                )
-    
-    # Extract rules
+    # Extract rules directly from in-memory files
     try:
-        result = await extract_rules_from_documents(
+        result = await extract_rules_from_uploads(
             db, 
             policy_set_id, 
             user.id,
+            files=files if has_files else None,
             raw_text=raw_text
         )
         return ResponseHandler.ok(
@@ -155,6 +119,30 @@ async def get_policy_set(
 ):
     data = await get_policy_set_with_rules(db, policy_set_id)
     return ResponseHandler.ok("Policy set fetched", data)
+
+
+# -------------------- CREATE RULE --------------------
+
+@router.post("/policy-sets/{policy_set_id}/rules", response_model=RuleOut)
+async def add_rule(
+    policy_set_id: int,
+    payload: RuleCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission("compliance.rules.create"))
+):
+    """
+    Manually create a compliance rule for a policy set.
+    
+    The policy set must be in draft status to add rules.
+    Rules created through this endpoint are marked as manually created (not AI-generated).
+    """
+    try:
+        rule = await create_rule(db, policy_set_id, payload, user.id)
+        return ResponseHandler.created("Rule created successfully", rule)
+    except ValueError as e:
+        return ResponseHandler.bad_request(str(e))
+    except Exception as e:
+        return ResponseHandler.bad_request(f"Failed to create rule: {str(e)}")
 
 
 # -------------------- UPDATE RULE --------------------

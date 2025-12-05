@@ -71,23 +71,34 @@ def save_events_batch(batch_size: int = BATCH_SIZE):
                     {
                         "user_id": ev.get("user_id"),
                         "conversation_id": ev.get("conversation_id") or ev.get("ws_conversation_id"),
-                        "call_id": ev.get("call_id"),
                         "event_type": ev.get("event_type") or ev.get("type"),
                         "payload": ev,
                         "received_at": received_at,
                     }
                 )
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Error normalizing event: {e}, sending to DLQ")
                 r.lpush(DLQ, json.dumps(ev))
+                failed += 1
 
         if not records:
             logger.info("No valid events after normalization.")
             return {"saved": saved, "failed": failed}
 
+        # Use bulk_insert_mappings for efficient batch insert
         db.bulk_insert_mappings(EventModel, records)
         db.commit()
         saved = len(records)
-        logger.info(f"Saved {saved} events to DB.")
+        logger.info(f"✅ Saved {saved} events to DB (schema: testdb)")
+    except Exception as e:
+        logger.error(f"Unexpected error in save_events_batch: {e}", exc_info=True)
+        db.rollback()
+        for event in events:
+            try:
+                r.lpush(DLQ, json.dumps(event))
+            except Exception:
+                pass
+        failed = len(events)
     except IntegrityError as e:
         db.rollback()
         logger.error(f"Integrity error: {e}")

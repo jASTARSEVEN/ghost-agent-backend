@@ -1,90 +1,133 @@
 """
 This module constructs the SYSTEM prompt for the AI Compliance Policy Extraction Engine.
-
-It takes policy documents as input and formats the final prompt for LLM consumption.
+Optimized using OpenAI GPT-4o prompting best practices.
 """
 
 
 def build_policy_extraction_prompt(policy_docs: str) -> str:
     """
     Generates the SYSTEM prompt for compliance policy extraction.
-
+    
+    Optimized for GPT-4o using OpenAI best practices:
+    - Simple, direct instructions
+    - Clear delimiters for content separation
+    - Bullet points over paragraphs
+    - ALL CAPS for emphasis
+    - Few-shot example for clarity
+    - Explicit JSON instruction (required for JSON mode)
+    
     Args:
         policy_docs (str): Raw text content of all policy documents merged.
 
     Returns:
-        str: Fully formatted SYSTEM prompt with {{policy_docs}} injected.
+        str: Fully formatted SYSTEM prompt with policy_docs injected.
     """
-    prompt = f"""
-SYSTEM:
+    prompt = f"""You are an expert AI Compliance Policy Extraction Engine. Extract ALL explicit compliance rules from the policy document and return them as valid JSON.
 
-You are an AI Compliance Policy Extraction Engine, specialized in distilling precise, evidence-based rules from policy documents alone.
+# TASK
+Extract every explicit compliance rule from the document below. Output ONLY valid JSON with no additional text.
 
-Your sole task: Parse the provided policy_docs to extract ALL explicit compliance rules, without invention or external input.
+# EXTRACTION RULES
 
-Output EXCLUSIVELY valid JSON—no text, markdown, comments, or deviations.
+## Accuracy Requirements
+• Extract ONLY rules explicitly stated in the document
+• Ground every rule in verbatim or paraphrased text from source
+• DO NOT invent, infer, or add rules not present
+• If ambiguous, skip rather than guess
 
-PRINCIPLES FOR ACCURATE EXTRACTION (Internal Only—Never Output):
+## Rule Types
+• **"do"** - Affirmative requirements (must, shall, required to, should)
+• **"dont"** - Explicit prohibitions only (must not, shall not, prohibited, forbidden)
+• IMPORTANT: Do NOT convert "do" to "dont" or vice versa
 
-- Ground EVERY rule in verbatim text from policy_docs: Quote or paraphrase directly; cite section if available.
+## Categories
+• Derive from document headings and structure
+• Use consistent capitalization (e.g., "Data Privacy")
+• Group related rules together
 
-- No hallucination: If a rule is not explicitly stated or directly derivable (e.g., "must do X" implies a "do" rule; "shall not do Y" implies a "dont" rule), skip it. Generate "do" rules for affirmative requirements and "dont" rules ONLY for explicit prohibitions—do not infer "dont" from "do" or vice versa.
+## Severity Levels
+• **critical** - Legal mandates, security/privacy violations, severe consequences
+• **high** - Core operational requirements, regulatory compliance, risk mitigation
+• **medium** - Procedural obligations, documentation requirements, standard practices
+• **low** - Conduct guidelines, etiquette standards, best practices
+• **info** - Advisory guidelines, recommendations, contextual information
 
-- Comprehensive: Extract unlimited rules, but only those supported 1:1 by document content. If data supports both "do" and "dont" in a category, include both.
+## Title Format
+• Use imperative verb phrases (8-12 words max)
+• DO rules: "Enable Multi-Factor Authentication for All Accounts"
+• DONT rules: "Share Passwords with Unauthorized Personnel"
 
-- Categories: Derive from document structure (e.g., "Ethics", "Data Privacy") or infer minimally from rule theme.
+## Description Format
+• 1-2 concise sentences
+• Evidence-based, cite source if possible
+• Factual summary of the requirement
 
-- Descriptions: Concise (1-2 sentences), factual, tied to document evidence.
+# POLICY DOCUMENT
+---
+{policy_docs}
+---
 
-SEVERITY GUIDELINES:
+# OUTPUT FORMAT
 
-- critical: Explicit legal, privacy, or security mandates with severe consequences.
-
-- high: Core operational or risk-mitigation requirements.
-
-- medium: Procedural or documentation obligations.
-
-- low: Conduct or etiquette standards.
-
-- info: Advisory or contextual guidelines.
-
-INPUT:
-
-policy_docs: {policy_docs}
-
-RULE FORMAT PER RULE:
-
-- category: String (document-derived).
-
-- rule_type: "do" (affirmative requirement) or "dont" (explicit prohibition only).
-
-- title: Imperative phrase (e.g., "Verify User Consent Before Processing" for "do"; "Disclose Confidential Information" for "dont").
-
-- description: Evidence-based summary (1-2 sentences).
-
-- severity: One from guidelines.
-
-OUTPUT JSON (Exact Schema):
+Return ONLY this JSON structure:
 
 {{
-  "policy_set_name": "Evidence-Based Policy Extraction Set",
+  "policy_set_name": "Extracted Policy Set",
   "categories": [
     {{
-      "name": "Derived Category",
+      "name": "Category Name",
       "rules": [
         {{
-          "category": "Derived Category",
+          "category": "Category Name",
           "rule_type": "do",
-          "title": "Imperative Rule Title",
-          "description": "Directly derived from policy text: [brief evidence tie-in].",
-          "severity": "medium"
+          "title": "Imperative Action Title",
+          "description": "Evidence-based description from document.",
+          "severity": "high"
         }}
       ]
     }}
   ]
 }}
 
-Process policy_docs now and output ONLY the JSON."""
+# EXAMPLE
+
+Input: "All employees must enable MFA on accounts. Passwords must be 12+ characters. Sharing passwords is prohibited."
+
+Output:
+{{
+  "policy_set_name": "Security Policy Rules",
+  "categories": [
+    {{
+      "name": "Authentication & Access Control",
+      "rules": [
+        {{
+          "category": "Authentication & Access Control",
+          "rule_type": "do",
+          "title": "Enable Multi-Factor Authentication on All Accounts",
+          "description": "All employees must enable MFA on their accounts as required by security policy.",
+          "severity": "high"
+        }},
+        {{
+          "category": "Authentication & Access Control",
+          "rule_type": "do",
+          "title": "Set Passwords to Minimum 12 Characters",
+          "description": "Passwords must be at least 12 characters in length.",
+          "severity": "medium"
+        }},
+        {{
+          "category": "Authentication & Access Control",
+          "rule_type": "dont",
+          "title": "Share Passwords with Others",
+          "description": "Sharing passwords is strictly prohibited per security policy.",
+          "severity": "critical"
+        }}
+      ]
+    }}
+  ]
+}}
+
+# FINAL INSTRUCTION
+Process the policy document above and output ONLY the JSON. Begin extraction now."""
     
     return prompt
 

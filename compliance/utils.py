@@ -4,6 +4,8 @@ import aiofiles
 import mimetypes
 import docx
 import PyPDF2
+import io
+from fastapi import UploadFile
 
 
 async def save_uploaded_file(file, destination: str):
@@ -161,3 +163,54 @@ def clean_text(text: str) -> str:
     text = re.sub(r" {3,}", "  ", text)
     
     return text
+
+
+async def extract_text_from_upload(file: UploadFile) -> str:
+    """
+    Extract text from an UploadFile object in-memory without saving to disk.
+    Supports PDF, DOCX, and TXT files.
+    
+    Args:
+        file: FastAPI UploadFile object
+        
+    Returns:
+        Extracted text content
+        
+    Raises:
+        ValueError: If file type is not supported or extraction fails
+    """
+    content = await file.read()
+    await file.seek(0)  # Reset file pointer for potential reuse
+    
+    filename = file.filename.lower()
+    
+    if filename.endswith(".txt"):
+        try:
+            return content.decode('utf-8')
+        except UnicodeDecodeError:
+            try:
+                return content.decode('latin-1')
+            except Exception as e:
+                raise ValueError(f"Failed to decode text file: {str(e)}")
+    
+    elif filename.endswith(".pdf"):
+        try:
+            pdf_file = io.BytesIO(content)
+            reader = PyPDF2.PdfReader(pdf_file)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text() or ""
+            return text
+        except Exception as e:
+            raise ValueError(f"Failed to extract text from PDF: {str(e)}")
+    
+    elif filename.endswith(".docx"):
+        try:
+            docx_file = io.BytesIO(content)
+            doc = docx.Document(docx_file)
+            return "\n".join([para.text for para in doc.paragraphs])
+        except Exception as e:
+            raise ValueError(f"Failed to extract text from DOCX: {str(e)}")
+    
+    else:
+        raise ValueError(f"Unsupported file type: {filename}. Supported types: .txt, .pdf, .docx")

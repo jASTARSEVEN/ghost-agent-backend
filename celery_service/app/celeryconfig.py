@@ -1,3 +1,4 @@
+# Celery configuration
 beat_schedule = {
     "save-events-every-2s": {
         "task": "app.tasks.save_events_batch",
@@ -5,3 +6,6 @@ beat_schedule = {
         "args": (50,),
     }
 }
+
+# Timezone
+timezone = "UTC"
