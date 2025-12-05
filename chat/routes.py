@@ -5,13 +5,16 @@ import logging
 from datetime import datetime
 import redis
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, FastAPI
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, FastAPI, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
 
 from chat.socket import Connection, room_manager
 from chat.models import EventModel
-from chat.dependencies import get_db
+# from chat.dependencies import get_db
+from authentication.models import User
+from common.dependencies import get_db, require_permission
+
 
 router = APIRouter()
 log = logging.getLogger("websocket")
@@ -100,18 +103,179 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, role: str):
 
 # -------- HTTP ENDPOINTS --------
 
+# @router.get("/api/conversations")
+# def get_all_conversations(db: Session = Depends(get_db), user: User = Depends(require_permission("compliance.documents.upload"))):
+#     rows = (
+#         db.query(
+#             EventModel.user_id,
+#             EventModel.conversation_id,
+#             func.max(EventModel.received_at).label("last_event"),
+#         )
+#         .group_by(EventModel.user_id, EventModel.conversation_id)
+#         .order_by(func.max(EventModel.received_at).desc())
+#         .all()
+#     )
+
+#     return [
+#         {
+#             "user_id": r.user_id,
+#             "conversation_id": r.conversation_id,
+#             "last_event": r.last_event,
+#         }
+#         for r in rows
+#     ]
+
+
+# @router.get("/api/conversations/{conversation_id}")
+# def get_messages(conversation_id: str, db: Session = Depends(get_db)):
+#     msgs = (
+#         db.query(EventModel)
+#         .filter(EventModel.conversation_id == conversation_id)
+#         .order_by(EventModel.received_at.asc())
+#         .all()
+#     )
+
+#     return [
+#         {
+#             "user_id": m.user_id,
+#             "conversation_id": m.conversation_id,
+#             "event_type": m.event_type,
+#             "payload": m.payload,
+#             "received_at": m.received_at,
+#         }
+#         for m in msgs
+#     ]
+
+
+
+# @router.get("/api/conversations")
+# async def get_all_conversations(
+#     user: User = Depends(require_permission("*")),
+#     db: AsyncSession = Depends(get_db),
+#     limit: int = 100,
+#     offset: int = 0
+# ):
+#     """
+#     Get all conversations for the current user.
+#     Optimized with subquery to reduce data scanned.
+#     """
+#     # Subquery to get max received_at per conversation
+#     max_dates_subq = (
+#         select(
+#             EventModel.user_id,
+#             EventModel.conversation_id,
+#             func.max(EventModel.received_at).label("last_event")
+#         )
+#         .filter(EventModel.user_id == str(user.id))
+#         .group_by(EventModel.user_id, EventModel.conversation_id)
+#         .subquery()
+#     )
+    
+#     # Main query - already has aggregated data, just order and paginate
+#     stmt = (
+#         select(
+#             max_dates_subq.c.user_id,
+#             max_dates_subq.c.conversation_id,
+#             max_dates_subq.c.last_event
+#         )
+#         .order_by(max_dates_subq.c.last_event.desc())
+#         .limit(limit)
+#         .offset(offset)
+#     )
+    
+#     result = await db.execute(stmt)
+#     rows = result.all()
+
+#     return [
+#         {
+#             "user_id": r.user_id,
+#             "conversation_id": r.conversation_id,
+#             "last_event": r.last_event,
+#         }
+#         for r in rows
+#     ]
+
+
+# @router.get("/api/conversations/{conversation_id}")
+# async def get_messages(
+#     conversation_id: str,
+#     user: User = Depends(require_permission("*")),
+#     db: AsyncSession = Depends(get_db),
+#     limit: int = 1000,
+#     offset: int = 0
+# ):
+#     """
+#     Get messages for a specific conversation.
+#     Optimized to use composite index efficiently.
+#     """
+#     # This query already uses the composite index (user_id, conversation_id)
+#     # Add limit to prevent loading too much data at once
+#     stmt = (
+#         select(EventModel)
+#         .filter(
+#             EventModel.conversation_id == conversation_id,
+#             EventModel.user_id == str(user.id)
+#         )
+#         .order_by(EventModel.received_at.asc())
+#         .limit(limit)
+#         .offset(offset)
+#     )
+    
+#     result = await db.execute(stmt)
+#     msgs = result.scalars().all()
+
+#     if not msgs:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="Conversation not found or access denied"
+#         )
+
+#     return [
+#         {
+#             "user_id": m.user_id,
+#             "conversation_id": m.conversation_id,
+#             "event_type": m.event_type,
+#             "payload": m.payload,
+#             "received_at": m.received_at,
+#         }
+#         for m in msgs
+#     ]
+
+
 @router.get("/api/conversations")
-def get_all_conversations(db: Session = Depends(get_db)):
-    rows = (
-        db.query(
+async def get_all_conversations(
+    user: User = Depends(require_permission("*")),
+    db: AsyncSession = Depends(get_db),
+    limit: int = 100,
+    offset: int = 0
+):
+    """
+    Get all conversations for the current user.
+    Optimized with subquery to reduce data scanned.
+    """
+    max_dates_subq = (
+        select(
             EventModel.user_id,
             EventModel.conversation_id,
-            func.max(EventModel.received_at).label("last_event"),
+            func.max(EventModel.received_at).label("last_event")
         )
+        .where(EventModel.user_id == str(user.id))
         .group_by(EventModel.user_id, EventModel.conversation_id)
-        .order_by(func.max(EventModel.received_at).desc())
-        .all()
+        .subquery()
     )
+
+    stmt = (
+        select(
+            max_dates_subq.c.user_id,
+            max_dates_subq.c.conversation_id,
+            max_dates_subq.c.last_event
+        )
+        .order_by(max_dates_subq.c.last_event.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+
+    rows = (await db.execute(stmt)).all()
 
     return [
         {
@@ -123,14 +287,142 @@ def get_all_conversations(db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/api/conversations/{conversation_id}")
-def get_messages(conversation_id: str, db: Session = Depends(get_db)):
-    msgs = (
-        db.query(EventModel)
-        .filter(EventModel.conversation_id == conversation_id)
-        .order_by(EventModel.received_at.asc())
-        .all()
+# Must come BEFORE /api/conversations/{conversation_id}
+@router.get("/api/conversations/formatted")
+async def get_all_formatted_conversations(
+    user: User = Depends(require_permission("*")),
+    db: AsyncSession = Depends(get_db),
+    limit: int = 50,
+    offset: int = 0
+):
+    """
+    Returns formatted conversations without the N+1 query problem.
+    Uses ONE query for all events of all selected conversations.
+    """
+
+    # 1. Get conversation IDs ordered by latest event
+    max_dates_subq = (
+        select(
+            EventModel.conversation_id,
+            func.max(EventModel.received_at).label("last_event")
+        )
+        .where(EventModel.user_id == str(user.id))
+        .group_by(EventModel.conversation_id)
+        .subquery()
     )
+
+    stmt = (
+        select(max_dates_subq.c.conversation_id)
+        .order_by(max_dates_subq.c.last_event.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+
+    conversation_ids = [row.conversation_id for row in (await db.execute(stmt)).all()]
+
+    if not conversation_ids:
+        return []
+
+    # 2. Fetch ALL events for those conversations in ONE single query
+    events_stmt = (
+        select(EventModel)
+        .where(
+            EventModel.user_id == str(user.id),
+            EventModel.conversation_id.in_(conversation_ids)
+        )
+        .order_by(EventModel.conversation_id.asc(), EventModel.received_at.asc())
+    )
+
+    events = (await db.execute(events_stmt)).scalars().all()
+
+    # 3. Group events by conversation_id
+    grouped = {cid: [] for cid in conversation_ids}
+    for evt in events:
+        grouped[evt.conversation_id].append(evt)
+
+    formatted = []
+
+    # 4. Build formatted conversations
+    for conv_id in conversation_ids:
+        msgs = grouped[conv_id]
+        if not msgs:
+            continue
+
+        # Detect call_started event
+        call_started = next((m for m in msgs if m.event_type == "call_started"), None)
+
+        customer = {}
+        date = None
+        user_id = user.id
+
+        if call_started and call_started.payload:
+            payload = call_started.payload
+            customer = payload.get("customer", {})
+            user_id = payload.get("user_id", call_started.user_id)
+            date = payload.get("started_at") or payload.get("received_at") or str(call_started.received_at)
+        else:
+            # fallback
+            first = msgs[0]
+            user_id = first.user_id
+            date = str(first.received_at)
+
+        compliance = ""
+        for m in msgs:
+            if m.event_type and "compliance" in m.event_type.lower():
+                compliance = (m.payload or {}).get("compliance_status", "")
+                break
+
+        formatted.append({
+            "customer": customer,
+            "user_id": str(user_id),
+            "date": date,
+            "compliance": compliance,
+            "conversation_id": conv_id,
+            "events": [
+                {
+                    "user_id": m.user_id,
+                    "conversation_id": m.conversation_id,
+                    "event_type": m.event_type,
+                    "payload": m.payload,
+                    "received_at": str(m.received_at),
+                }
+                for m in msgs
+            ]
+        })
+
+    return formatted
+
+
+@router.get("/api/conversations/{conversation_id}")
+async def get_messages(
+    conversation_id: str,
+    user: User = Depends(require_permission("*")),
+    db: AsyncSession = Depends(get_db),
+    limit: int = 1000,
+    offset: int = 0
+):
+    """
+    Get messages for a specific conversation (optimized).
+    """
+
+    stmt = (
+        select(EventModel)
+        .where(
+            EventModel.conversation_id == conversation_id,
+            EventModel.user_id == str(user.id)
+        )
+        .order_by(EventModel.received_at.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+
+    msgs = (await db.execute(stmt)).scalars().all()
+
+    if not msgs:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found or access denied"
+        )
 
     return [
         {
@@ -142,3 +434,71 @@ def get_messages(conversation_id: str, db: Session = Depends(get_db)):
         }
         for m in msgs
     ]
+
+
+@router.get("/api/conversations/{conversation_id}/formatted")
+async def get_formatted_conversation(
+    conversation_id: str,
+    user: User = Depends(require_permission("*")),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Single conversation formatted (no optimization needed).
+    """
+
+    stmt = (
+        select(EventModel)
+        .where(
+            EventModel.conversation_id == conversation_id,
+            EventModel.user_id == str(user.id)
+        )
+        .order_by(EventModel.received_at.asc())
+    )
+
+    msgs = (await db.execute(stmt)).scalars().all()
+
+    if not msgs:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found or access denied"
+        )
+
+    call_started = next((m for m in msgs if m.event_type == "call_started"), None)
+
+    customer = {}
+    date = None
+    user_id = user.id
+
+    if call_started and call_started.payload:
+        payload = call_started.payload
+        customer = payload.get("customer", {})
+        user_id = payload.get("user_id", call_started.user_id)
+        date = payload.get("started_at") or payload.get("received_at") or str(call_started.received_at)
+    else:
+        first = msgs[0]
+        user_id = first.user_id
+        date = str(first.received_at)
+
+    compliance = ""
+    for m in msgs:
+        if m.event_type and "compliance" in m.event_type.lower():
+            compliance = (m.payload or {}).get("compliance_status", "")
+            break
+
+    return {
+        "customer": customer,
+        "user_id": str(user_id),
+        "date": date,
+        "compliance": compliance,
+        "conversation_id": conversation_id,
+        "events": [
+            {
+                "user_id": m.user_id,
+                "conversation_id": m.conversation_id,
+                "event_type": m.event_type,
+                "payload": m.payload,
+                "received_at": str(m.received_at),
+            }
+            for m in msgs
+        ]
+    }
