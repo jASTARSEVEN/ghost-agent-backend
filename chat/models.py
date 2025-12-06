@@ -13,6 +13,7 @@ class EventModel(Base):
     conversation_id = Column(String, index=True)
     event_type = Column(String, index=True)  # Add index for filtering
     payload = Column(JSONB)
+
     
     received_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
 
