@@ -8,7 +8,7 @@ from .db_base import Base
 logger = logging.getLogger(__name__)
 load_dotenv()
 
-DATABASE_SCHEMA = os.getenv("DATABASE_SCHEMA", "testdb")
+DATABASE_SCHEMA = os.getenv("DATABASE_SCHEMA", "testghostagent")
 
 # Use sync Postgres (not asyncpg)
 DATABASE_URL = os.getenv("DATABASE_URL")

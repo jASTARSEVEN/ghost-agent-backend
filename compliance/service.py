@@ -1,10 +1,9 @@
 import os
 import uuid
-import logging
 from typing import List, Optional
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, insert
+from sqlalchemy import select, update
 
 from compliance.models import (
     CompliancePolicySet,
@@ -20,8 +19,6 @@ from compliance.utils import save_uploaded_file, extract_text_from_file, clean_a
 from compliance.agents.extraction_agent import ExtractionAgent
 
 from common.response_handler import ResponseHandler
-
-logger = logging.getLogger(__name__)
 
 
 UPLOAD_DIR = "uploads/compliance"
@@ -114,7 +111,8 @@ async def extract_rules_from_documents(
             extracted_texts.append(text)
         except Exception as e:
             # Log error but continue with other documents
-            logger.warning(f"Failed to extract text from {doc.file_name}: {str(e)}")
+            # In production, you might want to log this properly
+            print(f"Warning: Failed to extract text from {doc.file_name}: {str(e)}")
             continue
     
     # Add raw text if provided
@@ -142,7 +140,7 @@ async def extract_rules_from_documents(
         extracted_rules = await extraction_agent.extract_rules(all_text)
     except Exception as e:
         error_msg = f"Failed to extract rules from documents: {str(e)}"
-        logger.error(f"Extraction error: {error_msg}")
+        print(f"Extraction error: {error_msg}")
         raise ValueError(error_msg)
 
     if not extracted_rules:
@@ -167,7 +165,7 @@ async def extract_rules_from_documents(
             saved_count += 1
         except Exception as e:
             # Log error but continue with other rules
-            logger.warning(f"Failed to save rule '{rule.get('title', 'unknown')}': {str(e)}")
+            print(f"Warning: Failed to save rule '{rule.get('title', 'unknown')}': {str(e)}")
             continue
 
     if saved_count == 0:
@@ -213,7 +211,7 @@ async def extract_rules_from_uploads(
                 extracted_texts.append(text)
             except Exception as e:
                 # Log error but continue with other files
-                logger.warning(f"Failed to extract text from {file.filename}: {str(e)}")
+                print(f"Warning: Failed to extract text from {file.filename}: {str(e)}")
                 continue
     
     # Add raw text if provided
@@ -236,44 +234,38 @@ async def extract_rules_from_uploads(
         extracted_rules = await extraction_agent.extract_rules(all_text)
     except Exception as e:
         error_msg = f"Failed to extract rules: {str(e)}"
-        logger.error(f"Extraction error: {error_msg}")
+        print(f"Extraction error: {error_msg}")
         raise ValueError(error_msg)
 
     if not extracted_rules:
         raise ValueError("No rules could be extracted from the provided content")
 
-    # Save rules to database using bulk operations
-    rules_to_add = []
+    # Save rules to database
+    saved_count = 0
     for rule in extracted_rules:
         try:
-            rules_to_add.append({
-                "policy_set_id": policy_set_id,
-                "category": rule["category"],
-                "rule_type": RuleType(rule["rule_type"]),
-                "title": rule["title"],
-                "description": rule["description"],
-                "severity": Severity(rule["severity"]),
-                "ai_generated": True,
-                "example_snippets": rule.get("example_snippets", []),
-                "created_by": user_id,
-            })
+            new_rule = ComplianceRule(
+                policy_set_id=policy_set_id,
+                category=rule["category"],
+                rule_type=RuleType(rule["rule_type"]),
+                title=rule["title"],
+                description=rule["description"],
+                severity=Severity(rule["severity"]),
+                ai_generated=True,
+                example_snippets=rule.get("example_snippets", []),
+                created_by=user_id,
+            )
+            db.add(new_rule)
+            saved_count += 1
         except Exception as e:
-            logger.warning(f"Error preparing rule '{rule.get('title', 'unknown')}': {str(e)}")
+            # Log error but continue with other rules
+            print(f"Warning: Failed to save rule '{rule.get('title', 'unknown')}': {str(e)}")
             continue
 
-    if not rules_to_add:
-        raise ValueError("Failed to prepare any rules for database")
+    if saved_count == 0:
+        raise ValueError("Failed to save any rules to database")
 
-    # Bulk insert
-    try:
-        await db.execute(insert(ComplianceRule), rules_to_add)
-        await db.commit()
-        saved_count = len(rules_to_add)
-    except Exception as e:
-        await db.rollback()
-        logger.error(f"Failed to save rules to database: {str(e)}")
-        raise ValueError(f"Failed to save rules to database: {str(e)}")
-
+    await db.commit()
     return {"rules_extracted": len(extracted_rules), "rules_saved": saved_count}
 
 
@@ -429,3 +421,194 @@ async def get_all_policy_sets(db: AsyncSession, user_id: int):
     policy_sets = result.scalars().all()
     
     return policy_sets
+
+
+# -------------------- CONVERSATION EVALUATION --------------------
+
+async def get_active_policy_set(db: AsyncSession, user_id: int):
+    """
+    Get the active policy set for a user.
+    
+    Args:
+        db: Database session
+        user_id: User ID
+        
+    Returns:
+        Active policy set or None if no active set found
+    """
+    stmt = select(CompliancePolicySet).where(
+        CompliancePolicySet.created_by == user_id,
+        CompliancePolicySet.status == PolicySetStatus.active
+    ).order_by(CompliancePolicySet.created_at.desc())
+    
+    result = await db.execute(stmt)
+    policy_set = result.scalar_one_or_none()
+    
+    return policy_set
+
+
+async def evaluate_conversation_compliance(
+    db: AsyncSession,
+    conversation_id: str,
+    policy_set_id: int,
+    user_id: int
+):
+    """
+    Evaluate a conversation for compliance against policy rules.
+    
+    Main orchestration function that:
+    1. Validates conversation exists and is complete
+    2. Fetches policy rules
+    3. Processes conversation events
+    4. Calls evaluation agent
+    5. Stores results
+    6. Returns evaluation
+    
+    Args:
+        db: Database session
+        conversation_id: ID of conversation to evaluate
+        policy_set_id: Policy set to evaluate against
+        user_id: User triggering evaluation
+        
+    Returns:
+        Evaluation result dictionary
+        
+    Raises:
+        ValueError: If conversation invalid or evaluation fails
+    """
+    from compliance.conversation_processor import (
+        process_conversation_events,
+        validate_conversation_for_evaluation
+    )
+    from compliance.agents.evaluation_agent import EvaluationAgent
+    from compliance.models import ConversationComplianceEvaluation
+    
+    # 1. Get policy set with rules
+    policy_data = await get_policy_set_with_rules(db, policy_set_id)
+    
+    if "error" in policy_data:
+        raise ValueError(f"Policy set not found: {policy_set_id}")
+    
+    policy_set = policy_data["policy_set"]
+    rules = policy_data["rules"]
+    
+    if not rules:
+        raise ValueError(f"Policy set {policy_set_id} has no rules to evaluate against")
+    
+    # Filter to only enabled rules
+    enabled_rules = [r for r in rules if r.enabled]
+    
+    if not enabled_rules:
+        raise ValueError(f"Policy set {policy_set_id} has no enabled rules")
+    
+    # 2. Process conversation events
+    conversation_data = await process_conversation_events(conversation_id, db)
+    
+    # 3. Validate conversation is ready for evaluation
+    await validate_conversation_for_evaluation(conversation_data)
+    
+    # 4. Format rules for evaluation
+    formatted_rules = [
+        {
+            "id": rule.id,
+            "category": rule.category,
+            "rule_type": rule.rule_type.value,
+            "title": rule.title,
+            "description": rule.description,
+            "severity": rule.severity.value
+        }
+        for rule in enabled_rules
+    ]
+    
+    # 5. Call evaluation agent
+    evaluation_agent = EvaluationAgent()
+    
+    evaluation_result = await evaluation_agent.evaluate_conversation(
+        conversation_data=conversation_data.to_dict(),
+        policy_rules=formatted_rules
+    )
+    
+    # 6. Store evaluation results
+    evaluation_record = ConversationComplianceEvaluation(
+        conversation_id=conversation_id,
+        policy_set_id=policy_set_id,
+        overall_score=evaluation_result["overall_score"],
+        compliance_status=evaluation_result["compliance_status"],
+        summary=evaluation_result["summary"],
+        compliance_findings=evaluation_result["compliance_findings"],
+        violations_summary=evaluation_result["violations_summary"],
+        applicable_rules_summary=evaluation_result["applicable_rules_summary"],
+        llm_metadata=evaluation_result["llm_metadata"],
+        evaluated_by_user_id=user_id
+    )
+    
+    db.add(evaluation_record)
+    await db.commit()
+    await db.refresh(evaluation_record)
+    
+    # 7. Build response
+    response = {
+        "conversation_id": conversation_id,
+        "policy_set_id": policy_set_id,
+        "policy_set_name": policy_set.name,
+        "overall_score": evaluation_result["overall_score"],
+        "compliance_status": evaluation_result["compliance_status"],
+        "conversation_metadata": conversation_data.to_dict()["metadata"],
+        "compliance_findings": evaluation_result["compliance_findings"],
+        "violations_summary": evaluation_result["violations_summary"],
+        "applicable_rules_summary": evaluation_result["applicable_rules_summary"],
+        "summary": evaluation_result["summary"],
+        "llm_metadata": evaluation_result["llm_metadata"],
+        "evaluated_by_user_id": user_id,
+        "evaluated_at": evaluation_record.evaluated_at.isoformat(),
+        "evaluation_id": evaluation_record.id
+    }
+    
+    return response
+
+
+async def get_conversation_evaluation(
+    db: AsyncSession,
+    conversation_id: str
+):
+    """
+    Get the latest evaluation for a conversation.
+    
+    Args:
+        db: Database session
+        conversation_id: Conversation ID
+        
+    Returns:
+        Latest evaluation or None if not found
+    """
+    from compliance.models import ConversationComplianceEvaluation
+    
+    stmt = select(ConversationComplianceEvaluation).where(
+        ConversationComplianceEvaluation.conversation_id == conversation_id
+    ).order_by(ConversationComplianceEvaluation.evaluated_at.desc())
+    
+    result = await db.execute(stmt)
+    evaluation = result.scalar_one_or_none()
+    
+    if not evaluation:
+        return None
+    
+    # Get policy set name
+    policy_data = await get_policy_set_with_rules(db, evaluation.policy_set_id)
+    policy_set = policy_data.get("policy_set")
+    
+    return {
+        "conversation_id": evaluation.conversation_id,
+        "policy_set_id": evaluation.policy_set_id,
+        "policy_set_name": policy_set.name if policy_set else None,
+        "overall_score": evaluation.overall_score,
+        "compliance_status": evaluation.compliance_status,
+        "compliance_findings": evaluation.compliance_findings,
+        "violations_summary": evaluation.violations_summary,
+        "applicable_rules_summary": evaluation.applicable_rules_summary,
+        "summary": evaluation.summary,
+        "llm_metadata": evaluation.llm_metadata,
+        "evaluated_by_user_id": evaluation.evaluated_by_user_id,
+        "evaluated_at": evaluation.evaluated_at.isoformat(),
+        "evaluation_id": evaluation.id
+    }

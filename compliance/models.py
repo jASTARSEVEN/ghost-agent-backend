@@ -192,3 +192,26 @@ class ComplianceRule(Base):
 
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ConversationComplianceEvaluation(Base):
+    __tablename__ = "conversation_compliance_evaluations"
+    id = Column(Integer, primary_key=True)
+    conversation_id = Column(String, nullable=False, index=True)
+    policy_set_id = Column(Integer, ForeignKey("compliance_policy_sets.id"), nullable=False)
+    # Overall evaluation results
+    overall_score = Column(Integer)  # 0-100
+    compliance_status = Column(String)  # "compliant", "partially_compliant", "non_compliant"
+    summary = Column(Text)  # Natural language summary
+    # Detailed results (stored as JSONB for flexibility)
+    compliance_findings = Column(JSON)  # Array of findings with event_id references
+    violations_summary = Column(JSON)  # Summary of violations/warnings
+    applicable_rules_summary = Column(JSON)  # Which rules applied and results
+    # LLM metadata
+    llm_metadata = Column(JSON)  # Model used, tokens, processing time, etc.
+    # Audit trail
+    evaluated_by_user_id = Column(Integer, ForeignKey("users.id"))
+    evaluated_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Relationships
+    policy_set = relationship("CompliancePolicySet", foreign_keys=[policy_set_id])
+    evaluated_by = relationship("User", foreign_keys=[evaluated_by_user_id])

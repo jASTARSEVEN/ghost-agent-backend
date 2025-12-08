@@ -320,7 +320,7 @@ def run_migrations_online():
         poolclass=pool.NullPool,
     )
 
-    with connectable.connect() as connection:
+    with connectable.begin() as connection:
 
         connection.execute(text(f"SET search_path TO {DATABASE_SCHEMA}, public"))
 

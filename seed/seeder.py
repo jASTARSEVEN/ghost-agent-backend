@@ -31,12 +31,9 @@ if not db_url:
 if "+asyncpg" in db_url:
     db_url = db_url.replace("+asyncpg", "+psycopg2")
 
-# Handle SSL if needed
+# Handle SSL if needed - psycopg2 uses sslmode in the URL, not connect_args
+# Remove any ssl parameters from connect_args for psycopg2
 connect_args = {}
-use_ssl = getattr(settings, "DB_SSL", "false").lower() == "true"
-if use_ssl:
-    ssl_context = ssl.create_default_context()
-    connect_args = {"ssl": ssl_context}
 
 # Create sync engine
 engine = create_engine(
@@ -103,8 +100,8 @@ def seed_role_permissions(db: Session):
         permission_id = int(row["permission_id"])
         
         # Use PostgreSQL's ON CONFLICT DO NOTHING syntax
-        stmt = text("""
-            INSERT INTO role_permissions (role_id, permission_id)
+        stmt = text(f"""
+            INSERT INTO {DATABASE_SCHEMA}.role_permissions (role_id, permission_id)
             VALUES (:role_id, :permission_id)
             ON CONFLICT DO NOTHING
         """)
@@ -142,8 +139,8 @@ def seed_user_roles(db: Session):
         role_id = int(row["role_id"])
         
         # Use PostgreSQL's ON CONFLICT DO NOTHING syntax
-        stmt = text("""
-            INSERT INTO user_roles (user_id, role_id)
+        stmt = text(f"""
+            INSERT INTO {DATABASE_SCHEMA}.user_roles (user_id, role_id)
             VALUES (:user_id, :role_id)
             ON CONFLICT DO NOTHING
         """)

@@ -10,7 +10,10 @@ from compliance.service import (
     create_rule,
     update_rule,
     finalize_policy_set,
-    get_all_policy_sets
+    get_all_policy_sets,
+    get_active_policy_set,
+    evaluate_conversation_compliance,
+    get_conversation_evaluation
 )
 
 from compliance.schemas import (
@@ -23,6 +26,8 @@ from compliance.schemas import (
     DocumentOut,
     PolicyExtractionRequest,
     ExtractionResponse,
+    ConversationEvaluationRequest,
+    ConversationEvaluationResponse
 )
 
 from common.dependencies import require_permission, get_db
@@ -168,3 +173,97 @@ async def finalize_policy(
 ):
     result = await finalize_policy_set(db, policy_set_id, user.id)
     return ResponseHandler.ok("Policy set finalized", result)
+
+
+# -------------------- CONVERSATION EVALUATION --------------------
+
+@router.post("/conversations/{conversation_id}/evaluate", response_model=ConversationEvaluationResponse)
+async def evaluate_conversation(
+    conversation_id: str,
+    request: ConversationEvaluationRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission("compliance.conversation.evaluate"))
+):
+    """
+    Evaluate a conversation for compliance against policy rules.
+    
+    This endpoint:
+    1. Processes conversation events into structured format
+    2. Evaluates against policy rules using AI
+    3. Returns compliance findings with event_id references
+    4. Stores evaluation results for audit trail
+    
+    The response includes findings that reference specific event IDs from the conversation,
+    allowing the frontend to overlay compliance annotations on the existing transcript.
+    
+    Args:
+        conversation_id: ID of the conversation to evaluate
+        request: Evaluation request with optional policy_set_id
+        
+    Returns:
+        Detailed compliance evaluation with findings, score, and violations summary
+    """
+    try:
+        # Determine which policy set to use
+        policy_set_id = request.policy_set_id
+        
+        if not policy_set_id:
+            # Use active policy set if not specified
+            active_policy = await get_active_policy_set(db, user.id)
+            
+            if not active_policy:
+                return ResponseHandler.bad_request(
+                    "No active policy set found. Please activate a policy set or provide policy_set_id in request."
+                )
+            
+            policy_set_id = active_policy.id
+        
+        # Perform evaluation
+        evaluation_result = await evaluate_conversation_compliance(
+            db=db,
+            conversation_id=conversation_id,
+            policy_set_id=policy_set_id,
+            user_id=user.id
+        )
+        
+        return ResponseHandler.ok(
+            "Compliance evaluation completed successfully",
+            evaluation_result
+        )
+        
+    except ValueError as e:
+        return ResponseHandler.bad_request(str(e))
+    except Exception as e:
+        return ResponseHandler.server_error(f"Evaluation failed: {str(e)}")
+
+
+@router.get("/conversations/{conversation_id}/evaluation")
+async def get_latest_evaluation(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission("compliance.conversation.view"))
+):
+    """
+    Get the latest compliance evaluation for a conversation.
+    
+    Returns the most recent evaluation if one exists, otherwise returns 404.
+    Useful for checking if a conversation has already been evaluated.
+    
+    Args:
+        conversation_id: ID of the conversation
+        
+    Returns:
+        Latest evaluation result or 404 if not found
+    """
+    try:
+        evaluation = await get_conversation_evaluation(db, conversation_id)
+        
+        if not evaluation:
+            return ResponseHandler.not_found(
+                f"No evaluation found for conversation {conversation_id}"
+            )
+        
+        return ResponseHandler.ok("Evaluation retrieved", evaluation)
+        
+    except Exception as e:
+        return ResponseHandler.server_error(f"Failed to retrieve evaluation: {str(e)}")
