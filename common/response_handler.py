@@ -39,3 +39,7 @@ class ResponseHandler:
     @staticmethod
     def not_found(message: str = "Not found"):
         return ResponseHandler.response(message, status_code=404)
+
+    @staticmethod
+    def server_error(message: str = "Internal server error"):
+        return ResponseHandler.response(message, status_code=500)

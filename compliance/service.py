@@ -1,9 +1,11 @@
 import os
 import uuid
 from typing import List, Optional
+from datetime import timedelta
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
+import logging as logger
 
 from compliance.models import (
     CompliancePolicySet,
@@ -276,7 +278,7 @@ async def get_policy_set_with_rules(db: AsyncSession, policy_set_id: int):
     policy_set = (await db.execute(stmt_set)).scalar_one_or_none()
 
     if not policy_set:
-        return ResponseHandler.not_found("Policy set not found")
+        raise ValueError(f"Policy set not found: {policy_set_id}")
 
     stmt_rules = select(ComplianceRule).where(ComplianceRule.policy_set_id == policy_set_id)
     rules = (await db.execute(stmt_rules)).scalars().all()
@@ -451,24 +453,27 @@ async def evaluate_conversation_compliance(
     db: AsyncSession,
     conversation_id: str,
     policy_set_id: int,
-    user_id: int
+    user_id: int,
+    force_reevaluate: bool = False
 ):
     """
     Evaluate a conversation for compliance against policy rules.
     
     Main orchestration function that:
-    1. Validates conversation exists and is complete
-    2. Fetches policy rules
-    3. Processes conversation events
-    4. Calls evaluation agent
-    5. Stores results
-    6. Returns evaluation
+    1. Checks for cached evaluation (unless force_reevaluate)
+    2. Validates conversation exists and is complete
+    3. Fetches policy rules
+    4. Processes conversation events
+    5. Calls evaluation agent
+    6. Stores results
+    7. Returns evaluation
     
     Args:
         db: Database session
         conversation_id: ID of conversation to evaluate
         policy_set_id: Policy set to evaluate against
         user_id: User triggering evaluation
+        force_reevaluate: If True, bypass cache and re-evaluate
         
     Returns:
         Evaluation result dictionary
@@ -482,6 +487,42 @@ async def evaluate_conversation_compliance(
     )
     from compliance.agents.evaluation_agent import EvaluationAgent
     from compliance.models import ConversationComplianceEvaluation
+    # 0. Check for cached evaluation (smart caching)
+    if not force_reevaluate:
+        cache_cutoff = func.now() - timedelta(hours=24)
+        cached_stmt = select(ConversationComplianceEvaluation).where(
+            ConversationComplianceEvaluation.conversation_id == conversation_id,
+            ConversationComplianceEvaluation.policy_set_id == policy_set_id,
+            ConversationComplianceEvaluation.evaluated_at >= cache_cutoff
+        ).order_by(ConversationComplianceEvaluation.evaluated_at.desc())
+        
+        cached_result = await db.execute(cached_stmt)
+        cached_evaluation = cached_result.scalars().first()  # Get first (most recent) result
+        
+        if cached_evaluation:
+            # Return cached evaluation
+            policy_data = await get_policy_set_with_rules(db, policy_set_id)
+            policy_set = policy_data.get("policy_set")
+            
+            logger.info(f"Returning cached evaluation for conversation {conversation_id}")
+            
+            return {
+                "conversation_id": cached_evaluation.conversation_id,
+                "policy_set_id": cached_evaluation.policy_set_id,
+                "policy_set_name": policy_set.name if policy_set else None,
+                "overall_score": cached_evaluation.overall_score,
+                "compliance_status": cached_evaluation.compliance_status,
+                "conversation_metadata": {},  # Not stored in cache
+                "compliance_findings": cached_evaluation.compliance_findings,
+                "violations_summary": cached_evaluation.violations_summary,
+                "applicable_rules_summary": cached_evaluation.applicable_rules_summary,
+                "summary": cached_evaluation.summary,
+                "llm_metadata": cached_evaluation.llm_metadata,
+                "evaluated_by_user_id": cached_evaluation.evaluated_by_user_id,
+                "evaluated_at": cached_evaluation.evaluated_at.isoformat(),
+                "evaluation_id": cached_evaluation.id,
+                "from_cache": True
+            }
     
     # 1. Get policy set with rules
     policy_data = await get_policy_set_with_rules(db, policy_set_id)
@@ -561,7 +602,8 @@ async def evaluate_conversation_compliance(
         "llm_metadata": evaluation_result["llm_metadata"],
         "evaluated_by_user_id": user_id,
         "evaluated_at": evaluation_record.evaluated_at.isoformat(),
-        "evaluation_id": evaluation_record.id
+        "evaluation_id": evaluation_record.id,
+        "from_cache": False
     }
     
     return response

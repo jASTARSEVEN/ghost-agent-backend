@@ -154,11 +154,16 @@ class ConversationEvaluationRequest(BaseModel):
         None, 
         description="Policy set ID to evaluate against. If not provided, uses active policy set."
     )
+    force_reevaluate: Optional[bool] = Field(
+        False,
+        description="If True, bypass cache and force re-evaluation even if recent evaluation exists."
+    )
     
     class Config:
         json_schema_extra = {
             "example": {
-                "policy_set_id": 5
+                "policy_set_id": 5,
+                "force_reevaluate": False
             }
         }
 

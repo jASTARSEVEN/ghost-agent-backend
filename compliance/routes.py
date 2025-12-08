@@ -218,12 +218,13 @@ async def evaluate_conversation(
             
             policy_set_id = active_policy.id
         
-        # Perform evaluation
+        # Perform evaluation (with caching support)
         evaluation_result = await evaluate_conversation_compliance(
             db=db,
             conversation_id=conversation_id,
             policy_set_id=policy_set_id,
-            user_id=user.id
+            user_id=user.id,
+            force_reevaluate=request.force_reevaluate or False
         )
         
         return ResponseHandler.ok(
