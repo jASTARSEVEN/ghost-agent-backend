@@ -84,7 +84,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from database import Base
+from database import Base, DATABASE_SCHEMA
 import enum
 
 
@@ -114,19 +114,19 @@ class Severity(str, enum.Enum):
 STATUS_ENUM = Enum(
     PolicySetStatus,
     name="policy_set_status",
-    schema="testdb"
+    schema=DATABASE_SCHEMA
 )
 
 RULE_TYPE_ENUM = Enum(
     RuleType,
     name="rule_type_enum",
-    schema="testdb"
+    schema=DATABASE_SCHEMA
 )
 
 SEVERITY_ENUM = Enum(
     Severity,
     name="severity_enum",
-    schema="testdb"
+    schema=DATABASE_SCHEMA
 )
 
 

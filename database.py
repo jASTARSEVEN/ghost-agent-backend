@@ -5,6 +5,14 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy import MetaData
 from common.config import settings
 
+
+
+# Define schema ONLY ONCE
+
+DATABASE_SCHEMA = os.getenv("DATABASE_SCHEMA", "testdb")
+
+Base = declarative_base(metadata=MetaData(schema=DATABASE_SCHEMA))
+
 # Decide if SSL should be used
 use_ssl = getattr(settings, "DB_SSL", "false").lower() == "true"
 
@@ -45,8 +53,6 @@ AsyncSessionLocal = async_sessionmaker(
     autocommit=False,
     autoflush=False,
 )
-
-Base = declarative_base(metadata=MetaData(schema="testdb"))
 
 # Dependency to get DB session
 async def get_db() -> AsyncSession:

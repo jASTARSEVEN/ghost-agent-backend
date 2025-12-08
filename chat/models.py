@@ -14,7 +14,7 @@ class EventModel(Base):
     event_type = Column(String, index=True)  # Add index for filtering
     payload = Column(JSONB)
 
-    
+    test_column = Column(String, nullable=False, index=True)
     received_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
 
     __table_args__ = (

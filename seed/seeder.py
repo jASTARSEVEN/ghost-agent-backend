@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from common.config import settings
 
 load_dotenv()
+DATABASE_SCHEMA = os.getenv("DATABASE_SCHEMA", "testdb")
 
 BASE_PATH = Path(__file__).parent
 
@@ -50,7 +51,7 @@ engine = create_engine(
 def set_search_path(dbapi_conn, connection_record):
     """Set the search path to the ghostagent schema on each connection"""
     cursor = dbapi_conn.cursor()
-    cursor.execute("SET search_path TO ghostagent, public")
+    cursor.execute(f"SET search_path TO {DATABASE_SCHEMA}")
     cursor.close()
 
 # Create sync session factory

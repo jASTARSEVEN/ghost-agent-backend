@@ -8,6 +8,8 @@ from .db_base import Base
 logger = logging.getLogger(__name__)
 load_dotenv()
 
+DATABASE_SCHEMA = os.getenv("DATABASE_SCHEMA", "testdb")
+
 # Use sync Postgres (not asyncpg)
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL and "+asyncpg" in DATABASE_URL:
@@ -22,7 +24,7 @@ engine = create_engine(
     pool_recycle=1800,
     pool_size=5,  # Appropriate for Celery workers
     max_overflow=10,
-    connect_args={"options": "-csearch_path=testdb"},
+    connect_args={"options": f"-csearch_path={DATABASE_SCHEMA}"},
 )
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
