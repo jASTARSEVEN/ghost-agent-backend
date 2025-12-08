@@ -45,19 +45,17 @@ class EvaluationAgent:
         if not policy_rules:
             raise ValueError("Policy rules cannot be empty")
         
-        timeline = conversation_data.get("timeline", [])
         metadata = conversation_data.get("metadata", {})
         
         logger.info(
-            f"Starting evaluation for conversation {metadata.get('conversation_id')} "
+            f"Starting evaluation for conversation {conversation_data.get('conversation_id')} "
             f"against {len(policy_rules)} rules"
         )
         
         try:
             # Build evaluation prompt
             evaluation_prompt = build_compliance_evaluation_prompt(
-                conversation_timeline=timeline,
-                conversation_metadata=metadata,
+                conversation_data=conversation_data,
                 policy_rules=policy_rules
             )
             
