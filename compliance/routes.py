@@ -180,7 +180,7 @@ async def finalize_policy(
 @router.post("/conversations/{conversation_id}/evaluate", response_model=ConversationEvaluationResponse)
 async def evaluate_conversation(
     conversation_id: str,
-    request: ConversationEvaluationRequest,
+    request: ConversationEvaluationRequest = ConversationEvaluationRequest(),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission("compliance.conversation.evaluate"))
 ):
