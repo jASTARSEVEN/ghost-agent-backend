@@ -628,7 +628,7 @@ async def get_conversation_evaluation(
     ).order_by(ConversationComplianceEvaluation.evaluated_at.desc())
     
     result = await db.execute(stmt)
-    evaluation = result.scalar_one_or_none()
+    evaluation = result.scalars().first()
     
     if not evaluation:
         return None
