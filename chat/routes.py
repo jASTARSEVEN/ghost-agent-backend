@@ -402,7 +402,7 @@ async def get_all_formatted_conversations(
             "compliance": compliance,
             "conversation_id": conv_id,
             "events": [
-                {
+                {   "id": m.id,
                     "user_id": m.user_id,
                     "conversation_id": m.conversation_id,
                     "event_type": m.event_type,
@@ -448,7 +448,8 @@ async def get_messages(
         )
 
     return [
-        {
+        {  
+            "id": m.id,
             "user_id": m.user_id,
             "conversation_id": m.conversation_id,
             "event_type": m.event_type,
@@ -516,6 +517,7 @@ async def get_formatted_conversation(
         "conversation_id": conversation_id,
         "events": [
             {
+                "id": m.id,
                 "user_id": m.user_id,
                 "conversation_id": m.conversation_id,
                 "event_type": m.event_type,
