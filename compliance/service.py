@@ -1,7 +1,6 @@
 import os
 import uuid
 from typing import List, Optional
-from datetime import timedelta
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func
@@ -487,13 +486,12 @@ async def evaluate_conversation_compliance(
     )
     from compliance.agents.evaluation_agent import EvaluationAgent
     from compliance.models import ConversationComplianceEvaluation
-    # 0. Check for cached evaluation (smart caching)
+    
+    # 0. Check for cached evaluation (permanent cache)
     if not force_reevaluate:
-        cache_cutoff = func.now() - timedelta(hours=24)
         cached_stmt = select(ConversationComplianceEvaluation).where(
             ConversationComplianceEvaluation.conversation_id == conversation_id,
-            ConversationComplianceEvaluation.policy_set_id == policy_set_id,
-            ConversationComplianceEvaluation.evaluated_at >= cache_cutoff
+            ConversationComplianceEvaluation.policy_set_id == policy_set_id
         ).order_by(ConversationComplianceEvaluation.evaluated_at.desc())
         
         cached_result = await db.execute(cached_stmt)
