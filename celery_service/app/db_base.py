@@ -6,7 +6,7 @@ from sqlalchemy import MetaData
 
 load_dotenv()
 
-# Get schema from environment variable
-DATABASE_SCHEMA = os.getenv("DATABASE_SCHEMA", "testghostagent")
+# Get schema from environment variable, default to "testdb"
+DATABASE_SCHEMA = os.getenv("DATABASE_SCHEMA", "testdb")
 
 Base = declarative_base(metadata=MetaData(schema=DATABASE_SCHEMA))

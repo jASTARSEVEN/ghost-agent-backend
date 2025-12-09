@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
+from typing import List
 import redis
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, FastAPI, HTTPException, status, Query
@@ -10,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 
 from chat.socket import Connection, room_manager
-from chat.models import EventModel
+from chat.models import EventModel, ConversationLog
+from chat.schemas import ConversationLogOut, ConversationLogListResponse, ConversationLogEvent
 from authentication.models import User
 from authentication.utils import decode_token
 from common.dependencies import get_db, require_permission
@@ -527,3 +529,94 @@ async def get_formatted_conversation(
             for m in msgs
         ]
     }
+
+
+# -------- CONVERSATION LOG ROUTES --------
+
+@router.get("/api/conversation-logs", response_model=List[ConversationLogOut])
+async def get_conversation_logs(
+    user: User = Depends(require_permission("*")),
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0, le=100000),
+    is_evaluated: bool = Query(None, description="Filter by evaluation status")
+):
+    """
+    Get all conversation logs for the current user.
+    Returns complete conversations from conversation_log table.
+    """
+    stmt = select(ConversationLog).where(
+        ConversationLog.user_id == str(user.id)
+    )
+    
+    # Optional filter by evaluation status
+    if is_evaluated is not None:
+        stmt = stmt.where(ConversationLog.is_evaluated == is_evaluated)
+    
+    stmt = stmt.order_by(ConversationLog.ended_at.desc().nulls_last(), ConversationLog.created_at.desc())
+    stmt = stmt.limit(limit).offset(offset)
+    
+    result = await db.execute(stmt)
+    logs = result.scalars().all()
+    
+    return [
+        ConversationLogOut(
+            id=str(log.id),
+            user_id=log.user_id,
+            conversation_id=log.conversation_id,
+            customer=log.customer,
+            agent=log.agent,
+            events=[
+                ConversationLogEvent(**event) if isinstance(event, dict) else event
+                for event in (log.events or [])
+            ],
+            started_at=log.started_at.isoformat() if log.started_at else None,
+            ended_at=log.ended_at.isoformat() if log.ended_at else None,
+            is_evaluated=log.is_evaluated,
+            created_at=log.created_at.isoformat() if log.created_at else None,
+            updated_at=log.updated_at.isoformat() if log.updated_at else None,
+        )
+        for log in logs
+    ]
+
+
+@router.get("/api/conversation-logs/{conversation_id}", response_model=ConversationLogOut)
+async def get_conversation_log_by_id(
+    conversation_id: str,
+    user: User = Depends(require_permission("*")),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get a specific conversation log by conversation_id.
+    Returns complete conversation data from conversation_log table.
+    """
+    stmt = select(ConversationLog).where(
+        ConversationLog.conversation_id == conversation_id,
+        ConversationLog.user_id == str(user.id)
+    )
+    
+    result = await db.execute(stmt)
+    log = result.scalar_one_or_none()
+    
+    if not log:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation log not found or access denied"
+        )
+    
+    return ConversationLogOut(
+        id=str(log.id),
+        user_id=log.user_id,
+        conversation_id=log.conversation_id,
+        customer=log.customer,
+        agent=log.agent,
+        events=[
+            ConversationLogEvent(**event) if isinstance(event, dict) else event
+            for event in (log.events or [])
+        ],
+        started_at=log.started_at.isoformat() if log.started_at else None,
+        ended_at=log.ended_at.isoformat() if log.ended_at else None,
+        is_evaluated=log.is_evaluated,
+        created_at=log.created_at.isoformat() if log.created_at else None,
+        updated_at=log.updated_at.isoformat() if log.updated_at else None,
+    )
