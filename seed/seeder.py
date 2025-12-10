@@ -183,7 +183,7 @@ def run_seeder():
         print("🎉 Database seeding completed!")
     except Exception as e:
         db.rollback()
-        print(f"❌ Error seeding database: {e}")
+        print(f" Error seeding database: {e}")
         raise
     finally:
         db.close()
