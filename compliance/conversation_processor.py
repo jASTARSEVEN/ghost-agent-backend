@@ -59,11 +59,6 @@ async def process_conversation_events(
     """
     Process conversation events into simplified evaluation-ready format.
     
-    Focuses on:
-    - Dialogue turns (CSR and customer statements)
-    - Successful tool calls only (skips loading states)
-    - Basic metadata
-    
     Args:
         conversation_id: The conversation ID to process
         db: Database session
@@ -76,7 +71,6 @@ async def process_conversation_events(
     """
     logger.info(f"Processing conversation: {conversation_id}")
     
-    # Fetch all events for this conversation, ordered chronologically
     stmt = select(EventModel).where(
         EventModel.conversation_id == conversation_id
     ).order_by(EventModel.received_at.asc())
@@ -89,25 +83,22 @@ async def process_conversation_events(
     
     logger.info(f"Found {len(events)} events")
     
-    # Initialize conversation data
     conversation_data = ConversationData()
     conversation_data.conversation_id = conversation_id
     conversation_data.user_id = events[0].user_id
     conversation_data.total_events = len(events)
     
-    # Process each event
     dialogue_sequence = 0
     
     for event in events:
         event_type = event.event_type
         payload = event.payload or {}
         
-        # Extract dialogue turns
         if event_type == "transcript_turn":
             speaker = _normalize_speaker(payload.get("speaker", "unknown"))
             text = _extract_text(payload)
             
-            if text:  # Only include if there's actual text
+            if text:  
                 dialogue_sequence += 1
                 conversation_data.dialogue.append({
                     "event_id": str(event.id),
@@ -118,11 +109,9 @@ async def process_conversation_events(
                 })
                 conversation_data.total_turns += 1
         
-        # Extract successful tool calls only
         elif event_type == "mcp_tool_call":
             state = payload.get("state", "unknown")
             
-            # Only include successful tool calls
             if state == "success":
                 tool_name = payload.get("tool_name") or payload.get("name") or "unknown_tool"
                 conversation_data.tools_used.append({
@@ -133,7 +122,6 @@ async def process_conversation_events(
                 })
                 conversation_data.total_tool_calls += 1
         
-        # Track call lifecycle for metadata
         elif event_type in ["call_started", "incoming_call_ringing"]:
             if not conversation_data.started_at:
                 conversation_data.started_at = event.received_at
@@ -142,11 +130,9 @@ async def process_conversation_events(
             conversation_data.ended_at = event.received_at
             conversation_data.is_completed = True
     
-    # Set default start time if not found
     if not conversation_data.started_at and events:
         conversation_data.started_at = events[0].received_at
     
-    # Calculate duration
     if conversation_data.started_at and conversation_data.ended_at:
         conversation_data.duration_seconds = int(
             (conversation_data.ended_at - conversation_data.started_at).total_seconds()

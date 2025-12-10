@@ -48,7 +48,6 @@ class TextChunker:
         Returns:
             True if text exceeds chunk size threshold
         """
-        # Use 80% of chunk_size as threshold to account for variation
         threshold = int(self.chunk_size * 0.8)
         return len(text) > threshold
     
@@ -66,7 +65,6 @@ class TextChunker:
         if not text or not text.strip():
             return []
         
-        # If text is small enough, return as single chunk
         if not self.should_chunk(text):
             return [(text, {
                 "chunk_index": 0,
@@ -78,26 +76,21 @@ class TextChunker:
         
         logger.info(f"Chunking text of length {len(text)} characters")
         
-        # Split text into chunks
         chunks = []
         start_pos = 0
         chunk_index = 0
         
         while start_pos < len(text):
-            # Calculate end position for this chunk
             end_pos = min(start_pos + self.chunk_size, len(text))
             
-            # If not at the end, try to break at a natural boundary
             if end_pos < len(text):
                 end_pos = self._find_break_point(text, start_pos, end_pos)
             
-            # Extract chunk
             chunk_text = text[start_pos:end_pos]
             
-            # Add chunk with metadata
             chunks.append((chunk_text, {
                 "chunk_index": chunk_index,
-                "total_chunks": -1,  # Will be updated after
+                "total_chunks": -1,  
                 "start_pos": start_pos,
                 "end_pos": end_pos,
                 "is_single_chunk": False
@@ -105,19 +98,15 @@ class TextChunker:
             
             chunk_index += 1
             
-            # Move to next chunk with overlap
-            # For the last chunk, we're done
+
             if end_pos >= len(text):
                 break
             
-            # Calculate next start position (with overlap)
             start_pos = end_pos - self.chunk_overlap
             
-            # Make sure we're making progress
             if start_pos <= chunks[-1][1]["start_pos"]:
                 start_pos = end_pos
         
-        # Update total_chunks in all metadata
         total_chunks = len(chunks)
         for i, (chunk_text, metadata) in enumerate(chunks):
             metadata["total_chunks"] = total_chunks
@@ -137,31 +126,25 @@ class TextChunker:
         Returns:
             Adjusted end position at natural boundary
         """
-        # Look back from preferred_end to find a good break point
-        search_window = min(500, preferred_end - start)  # Look back up to 500 chars
+        search_window = min(500, preferred_end - start)  
         search_start = preferred_end - search_window
         
-        # Priority 1: Double newline (paragraph break)
         para_breaks = [m.end() for m in re.finditer(r'\n\s*\n', text[search_start:preferred_end])]
         if para_breaks:
             return search_start + para_breaks[-1]
         
-        # Priority 2: Single newline (line break)
         line_breaks = [m.end() for m in re.finditer(r'\n', text[search_start:preferred_end])]
         if line_breaks:
             return search_start + line_breaks[-1]
         
-        # Priority 3: Sentence boundary (., !, ?)
         sentence_breaks = [m.end() for m in re.finditer(r'[.!?]\s+', text[search_start:preferred_end])]
         if sentence_breaks:
             return search_start + sentence_breaks[-1]
         
-        # Priority 4: Word boundary
         word_breaks = [m.end() for m in re.finditer(r'\s+', text[search_start:preferred_end])]
         if word_breaks:
             return search_start + word_breaks[-1]
         
-        # Fallback: use preferred_end
         return preferred_end
     
     def merge_chunk_results(self, chunk_results: List[list]) -> list:
@@ -177,11 +160,9 @@ class TextChunker:
         if not chunk_results:
             return []
         
-        # If only one chunk, return as-is
         if len(chunk_results) == 1:
             return chunk_results[0]
         
-        # Merge all rules
         all_rules = []
         for rules in chunk_results:
             if rules:
@@ -192,7 +173,6 @@ class TextChunker:
         
         logger.info(f"Merging {len(all_rules)} rules from {len(chunk_results)} chunks")
         
-        # Deduplicate based on similarity
         deduplicated = self._deduplicate_rules(all_rules)
         
         logger.info(f"After deduplication: {len(deduplicated)} unique rules")
@@ -215,10 +195,8 @@ class TextChunker:
         seen_signatures = set()
         
         for rule in rules:
-            # Create a signature for the rule
             signature = self._rule_signature(rule)
             
-            # Check if we've seen a very similar rule
             if signature not in seen_signatures:
                 seen_signatures.add(signature)
                 unique_rules.append(rule)
@@ -237,16 +215,13 @@ class TextChunker:
         Returns:
             Signature string
         """
-        # Normalize title and create signature
         title = rule.get("title", "").lower().strip()
         category = rule.get("category", "").lower().strip()
         rule_type = rule.get("rule_type", "").lower().strip()
         
-        # Remove common punctuation and extra spaces
         title = re.sub(r'[^\w\s]', '', title)
         title = re.sub(r'\s+', ' ', title)
         
-        # Create signature from key components
         signature = f"{category}|{rule_type}|{title}"
         
         return signature
@@ -264,7 +239,6 @@ class TextChunker:
         return len(text) // 4
 
 
-# Global chunker instance
 _chunker: TextChunker = None
 
 

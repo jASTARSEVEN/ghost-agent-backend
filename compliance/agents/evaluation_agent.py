@@ -53,7 +53,6 @@ class EvaluationAgent:
         )
         
         try:
-            # Build evaluation prompt
             evaluation_prompt = build_compliance_evaluation_prompt(
                 conversation_data=conversation_data,
                 policy_rules=policy_rules
@@ -61,14 +60,13 @@ class EvaluationAgent:
             
             logger.info(f"Evaluation prompt built: {len(evaluation_prompt)} characters")
             
-            # Call OpenAI API
             start_time = datetime.now()
             
             response_text = await self.openai_client.generate_content_with_retry(
                 prompt="Evaluate this conversation for compliance.",
                 system_instruction=evaluation_prompt,
-                temperature=0.2,  # Low temperature for consistent evaluation
-                max_tokens=6000,  # Allow space for detailed evaluation
+                temperature=0.2,  
+                max_tokens=6000,  
                 timeout=float(settings.EXTRACTION_TIMEOUT_PER_CHUNK or 60),
                 use_json_mode=True,
                 max_retries=3
@@ -77,11 +75,9 @@ class EvaluationAgent:
             processing_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
             
             logger.info(f"OpenAI evaluation completed in {processing_time_ms}ms")
-            
-            # Parse and validate response
+           
             evaluation_result = self._parse_evaluation_response(response_text)
             
-            # Add metadata
             evaluation_result["llm_metadata"] = {
                 "model_used": settings.AZURE_DEPLOYMENT_NAME or "gpt-4o",
                 "processing_time_ms": processing_time_ms,
@@ -89,7 +85,6 @@ class EvaluationAgent:
                 "response_length": len(response_text)
             }
             
-            # Validate evaluation structure
             self._validate_evaluation(evaluation_result, policy_rules)
             
             logger.info(
@@ -116,7 +111,6 @@ class EvaluationAgent:
         Raises:
             ValueError: If JSON parsing fails
         """
-        # Clean the response - remove markdown code blocks if present
         text = response_text.strip()
         
         if text.startswith("```json"):
@@ -157,7 +151,6 @@ class EvaluationAgent:
         Raises:
             ValueError: If validation fails
         """
-        # Check required top-level fields
         required_fields = [
             "overall_score",
             "compliance_status",
@@ -171,18 +164,15 @@ class EvaluationAgent:
         if missing_fields:
             raise ValueError(f"Missing required fields in evaluation: {missing_fields}")
         
-        # Validate overall_score
         score = evaluation["overall_score"]
         if not isinstance(score, (int, float)) or score < 0 or score > 100:
             raise ValueError(f"overall_score must be between 0-100, got: {score}")
         
-        # Validate compliance_status
         valid_statuses = ["compliant", "partially_compliant", "non_compliant"]
         status = evaluation["compliance_status"]
         if status not in valid_statuses:
             raise ValueError(f"compliance_status must be one of {valid_statuses}, got: {status}")
         
-        # Validate compliance_findings structure
         findings = evaluation["compliance_findings"]
         if not isinstance(findings, list):
             raise ValueError("compliance_findings must be an array")
@@ -193,7 +183,6 @@ class EvaluationAgent:
             if "annotations" not in finding or not isinstance(finding["annotations"], list):
                 raise ValueError("Each finding must have annotations array")
             
-            # Validate annotations
             for annotation in finding["annotations"]:
                 required_annotation_fields = [
                     "status", "severity", "rule_id", "message", "confidence"
@@ -202,12 +191,10 @@ class EvaluationAgent:
                 if missing:
                     raise ValueError(f"Annotation missing fields: {missing}")
                 
-                # Validate confidence
                 confidence = annotation["confidence"]
                 if not isinstance(confidence, (int, float)) or confidence < 0 or confidence > 1:
                     raise ValueError(f"confidence must be between 0-1, got: {confidence}")
         
-        # Validate violations_summary
         summary = evaluation["violations_summary"]
         if not isinstance(summary, dict):
             raise ValueError("violations_summary must be an object")

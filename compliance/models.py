@@ -1,83 +1,3 @@
-# from sqlalchemy import (
-#     Column, Integer, String, Text, Boolean, ForeignKey, DateTime, Enum, JSON
-# )
-# from sqlalchemy.sql import func
-# from sqlalchemy.orm import relationship
-# from database import Base
-# import enum
-
-
-# class PolicySetStatus(str, enum.Enum):
-#     draft = "draft"
-#     active = "active"
-#     archived = "archived"
-
-
-# class RuleType(str, enum.Enum):
-#     do = "do"
-#     dont = "dont"
-
-
-# class Severity(str, enum.Enum):
-#     info = "info"
-#     low = "low"
-#     medium = "medium"
-#     high = "high"
-#     critical = "critical"
-
-
-# # ------------------------- POLICY SET -------------------------
-
-# class CompliancePolicySet(Base):
-#     __tablename__ = "compliance_policy_sets"
-
-#     id = Column(Integer, primary_key=True)
-#     version = Column(Integer, nullable=False)
-#     status = Column(Enum(PolicySetStatus), default=PolicySetStatus.draft)
-#     name = Column(String(255), nullable=True)
-
-#     created_by = Column(Integer, ForeignKey("users.id"))
-#     created_at = Column(DateTime(timezone=True), server_default=func.now())
-#     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-# # ------------------------- DOCUMENTS -------------------------
-
-# class CompliancePolicyDocument(Base):
-#     __tablename__ = "compliance_policy_documents"
-
-#     id = Column(Integer, primary_key=True)
-#     policy_set_id = Column(Integer, ForeignKey("compliance_policy_sets.id"))
-#     file_name = Column(String, nullable=False)
-#     file_path = Column(String, nullable=False)
-#     file_type = Column(String, nullable=False)
-
-#     uploaded_by = Column(Integer, ForeignKey("users.id"))
-#     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-
-# # ------------------------- RULES -------------------------
-
-# class ComplianceRule(Base):
-#     __tablename__ = "compliance_rules"
-
-#     id = Column(Integer, primary_key=True)
-#     policy_set_id = Column(Integer, ForeignKey("compliance_policy_sets.id", ondelete="CASCADE"))
-
-#     category = Column(String)
-#     rule_type = Column(Enum(RuleType))
-#     title = Column(String, nullable=False)
-#     description = Column(Text)
-#     severity = Column(Enum(Severity), default=Severity.info)
-#     enabled = Column(Boolean, default=True)
-
-#     ai_generated = Column(Boolean, default=True)
-#     example_snippets = Column(JSON, nullable=True)
-
-#     created_by = Column(Integer, ForeignKey("users.id"))
-#     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, ForeignKey,
     DateTime, Enum, JSON
@@ -86,11 +6,6 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base, DATABASE_SCHEMA
 import enum
-
-
-# ============================================================
-# ENUM DEFINITIONS (Now created inside "compliance" schema)
-# ============================================================
 
 class PolicySetStatus(str, enum.Enum):
     draft = "draft"
@@ -129,11 +44,6 @@ SEVERITY_ENUM = Enum(
     schema=DATABASE_SCHEMA
 )
 
-
-# ============================================================
-# POLICY SET
-# ============================================================
-
 class CompliancePolicySet(Base):
     __tablename__ = "compliance_policy_sets"
 
@@ -150,11 +60,6 @@ class CompliancePolicySet(Base):
     documents = relationship("CompliancePolicyDocument", cascade="all, delete-orphan")
     rules = relationship("ComplianceRule", cascade="all, delete-orphan")
 
-
-# ============================================================
-# DOCUMENTS
-# ============================================================
-
 class CompliancePolicyDocument(Base):
     __tablename__ = "compliance_policy_documents"
  
@@ -167,11 +72,6 @@ class CompliancePolicyDocument(Base):
 
     uploaded_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-
-# ============================================================
-# RULES
-# ============================================================
 
 class ComplianceRule(Base):
     __tablename__ = "compliance_rules"
@@ -199,19 +99,14 @@ class ConversationComplianceEvaluation(Base):
     id = Column(Integer, primary_key=True)
     conversation_id = Column(String, nullable=False, index=True)
     policy_set_id = Column(Integer, ForeignKey("compliance_policy_sets.id"), nullable=False)
-    # Overall evaluation results
-    overall_score = Column(Integer)  # 0-100
-    compliance_status = Column(String)  # "compliant", "partially_compliant", "non_compliant"
-    summary = Column(Text)  # Natural language summary
-    # Detailed results (stored as JSONB for flexibility)
-    compliance_findings = Column(JSON)  # Array of findings with event_id references
-    violations_summary = Column(JSON)  # Summary of violations/warnings
-    applicable_rules_summary = Column(JSON)  # Which rules applied and results
-    # LLM metadata
-    llm_metadata = Column(JSON)  # Model used, tokens, processing time, etc.
-    # Audit trail
+    overall_score = Column(Integer)  
+    compliance_status = Column(String)  
+    summary = Column(Text)  
+    compliance_findings = Column(JSON)  
+    violations_summary = Column(JSON)  
+    applicable_rules_summary = Column(JSON)  
+    llm_metadata = Column(JSON) 
     evaluated_by_user_id = Column(Integer, ForeignKey("users.id"))
     evaluated_at = Column(DateTime(timezone=True), server_default=func.now())
-    # Relationships
     policy_set = relationship("CompliancePolicySet", foreign_keys=[policy_set_id])
     evaluated_by = relationship("User", foreign_keys=[evaluated_by_user_id])

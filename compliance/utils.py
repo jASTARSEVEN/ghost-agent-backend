@@ -129,11 +129,6 @@ def clean_text(text: str) -> str:
     """
     Clean and normalize text content.
     
-    - Removes excessive whitespace
-    - Normalizes line breaks
-    - Removes control characters (except newlines and tabs)
-    - Handles encoding issues
-    
     Args:
         text: Raw text to clean
         
@@ -143,23 +138,12 @@ def clean_text(text: str) -> str:
     if not text:
         return ""
     
-    # Remove null bytes and other problematic control characters
     text = text.replace("\x00", "")
-    
-    # Normalize line breaks (handle Windows \r\n, Mac \r, Unix \n)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    
-    # Remove excessive blank lines (more than 2 consecutive newlines)
     text = re.sub(r"\n{3,}", "\n\n", text)
-    
-    # Remove trailing whitespace from each line
     lines = [line.rstrip() for line in text.split("\n")]
     text = "\n".join(lines)
-    
-    # Remove leading/trailing whitespace from entire text
     text = text.strip()
-    
-    # Remove excessive spaces (more than 2 consecutive spaces)
     text = re.sub(r" {3,}", "  ", text)
     
     return text

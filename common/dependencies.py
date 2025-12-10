@@ -21,14 +21,11 @@ async def get_current_user_from_token(
     if not token:
         return None
 
-    # Decode token
     payload = decode_token(token)
-    # Support both "sub" (JWT standard) and "user_id" (backward compatibility)
     user_id = payload.get("sub") or payload.get("user_id")
     if not user_id:
         return None
 
-    # Check if token is revoked
     stmt = select(UserToken).where(
         UserToken.access_token == token,
         UserToken.is_revoked == False
@@ -43,7 +40,6 @@ async def get_current_user_from_token(
             detail="Token has been revoked or is invalid"
         )
 
-    # Get user with roles and permissions eagerly loaded
     stmt = select(User).options(
         selectinload(User.roles).selectinload(Role.permissions)
     ).where(User.id == int(user_id))

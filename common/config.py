@@ -36,9 +36,7 @@ class Settings(BaseSettings):
     EXTRACTION_CHUNK_OVERLAP: int = Field(default=500, ge=0, le=10000, description="Overlap between chunks")
     EXTRACTION_MAX_PARALLEL: int = Field(default=5, ge=1, le=20, description="Max parallel chunk processing")
     EXTRACTION_TIMEOUT_PER_CHUNK: int = Field(default=90, ge=10, le=300, description="Timeout per chunk in seconds")
-    
-    # Validators are redundant since Field already has min_length and ... means required
-    # But keeping for explicit error messages
+
     @field_validator("DATABASE_URL")
     @classmethod
     def validate_database_url(cls, v: str) -> str:

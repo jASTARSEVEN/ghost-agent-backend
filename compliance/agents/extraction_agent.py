@@ -30,7 +30,6 @@ class ExtractionAgent:
         """
         self.openai_client = get_openai_client()
         self.text_chunker = get_text_chunker()
-        # Note: We now use build_policy_extraction_prompt() function instead of loading from file
     
     async def extract_rules(self, document_text: str) -> list[dict]:
         """
@@ -89,24 +88,21 @@ class ExtractionAgent:
         Returns:
             List of validated rule dictionaries
         """
-        # Build the prompt with document text injected
         system_prompt = build_policy_extraction_prompt(document_text)
         
-        # Call OpenAI API
         response_text = await self.openai_client.generate_content_with_retry(
             prompt="Extract all compliance rules from the provided policy documents.",
             system_instruction=system_prompt,
-            temperature=0.3,  # Lower temperature for more consistent extraction
-            max_tokens=4000,  # Allow enough tokens for comprehensive extraction
+            temperature=0.3,  
+            max_tokens=4000,  
             timeout=float(settings.EXTRACTION_TIMEOUT_PER_CHUNK),
-            use_json_mode=True,  # Use JSON mode for guaranteed valid JSON
+            use_json_mode=True,  
             max_retries=3
         )
         
-        # Parse JSON response
+        
         rules = self._parse_response(response_text)
         
-        # Validate and normalize rules
         validated_rules = self._validate_rules(rules)
         
         return validated_rules
@@ -121,35 +117,28 @@ class ExtractionAgent:
         Returns:
             List of validated and deduplicated rule dictionaries
         """
-        # Split document into chunks
         chunks = self.text_chunker.chunk_text(document_text)
         logger.info(f"Split document into {len(chunks)} chunks for parallel processing")
         
-        # Process chunks in parallel (with concurrency limit)
         max_parallel = settings.EXTRACTION_MAX_PARALLEL
         chunk_results = []
         
-        # Process in batches to control concurrency
         for i in range(0, len(chunks), max_parallel):
             batch = chunks[i:i + max_parallel]
             batch_indices = list(range(i, i + len(batch)))
             
             logger.info(f"Processing batch {i // max_parallel + 1}: chunks {batch_indices[0]}-{batch_indices[-1]}")
             
-            # Create tasks for this batch
             tasks = [
                 self._extract_rules_from_chunk(chunk_text, metadata, chunk_idx)
                 for chunk_idx, (chunk_text, metadata) in zip(batch_indices, batch)
             ]
             
-            # Wait for all tasks in batch to complete
             batch_results = await asyncio.gather(*tasks, return_exceptions=True)
             
-            # Handle results and errors
             for chunk_idx, result in zip(batch_indices, batch_results):
                 if isinstance(result, Exception):
                     logger.error(f"Chunk {chunk_idx} failed: {str(result)}")
-                    # Continue with other chunks - don't fail entire extraction
                 elif result:
                     chunk_results.append(result)
         
@@ -158,7 +147,6 @@ class ExtractionAgent:
         
         logger.info(f"Successfully processed {len(chunk_results)} chunks")
         
-        # Merge and deduplicate results
         merged_rules = self.text_chunker.merge_chunk_results(chunk_results)
         
         return merged_rules
@@ -187,15 +175,12 @@ class ExtractionAgent:
                 f"{len(chunk_text)} chars"
             )
             
-            # Build the prompt for this chunk
-            # Add context about chunking in the prompt
             chunk_context = ""
             if metadata['total_chunks'] > 1:
                 chunk_context = f"\n\nNOTE: This is chunk {metadata['chunk_index'] + 1} of {metadata['total_chunks']} from a larger document. Extract all rules from this section."
             
             system_prompt = build_policy_extraction_prompt(chunk_text + chunk_context)
             
-            # Call OpenAI API for this chunk
             response_text = await self.openai_client.generate_content_with_retry(
                 prompt="Extract all compliance rules from the provided policy document section.",
                 system_instruction=system_prompt,
@@ -203,13 +188,11 @@ class ExtractionAgent:
                 max_tokens=4000,
                 timeout=float(settings.EXTRACTION_TIMEOUT_PER_CHUNK),
                 use_json_mode=True,
-                max_retries=2  # Less retries for chunks to fail fast
+                max_retries=2  
             )
             
-            # Parse JSON response
             rules = self._parse_response(response_text)
             
-            # Validate and normalize rules
             validated_rules = self._validate_rules(rules)
             
             logger.info(f"Chunk {chunk_idx} extracted {len(validated_rules)} rules")
@@ -217,7 +200,6 @@ class ExtractionAgent:
             
         except Exception as e:
             logger.error(f"Failed to extract rules from chunk {chunk_idx}: {str(e)}")
-            # Re-raise to be caught by gather()
             raise
     
     def _parse_response(self, response_text: str) -> list[dict]:
@@ -234,39 +216,33 @@ class ExtractionAgent:
         Raises:
             ValueError: If JSON parsing fails
         """
-        # Clean the response - remove markdown code blocks if present
         text = response_text.strip()
         
-        # Remove markdown code blocks if present
         if text.startswith("```json"):
-            text = text[7:]  # Remove ```json
+            text = text[7:]  
         elif text.startswith("```"):
-            text = text[3:]  # Remove ```
+            text = text[3:]  
         
         if text.endswith("```"):
-            text = text[:-3]  # Remove closing ```
+            text = text[:-3]  
         
         text = text.strip()
         
         try:
             data = json.loads(text)
             
-            # Handle new format: {"policy_set_name": "...", "categories": [...]}
             if isinstance(data, dict) and "categories" in data:
                 rules = []
                 for category_obj in data["categories"]:
                     if isinstance(category_obj, dict) and "rules" in category_obj:
-                        # Extract rules from this category
                         category_rules = category_obj["rules"]
                         if isinstance(category_rules, list):
                             rules.extend(category_rules)
                 return rules
             
-            # Handle legacy format: {"rules": [...]}
             elif isinstance(data, dict) and "rules" in data:
                 rules = data["rules"]
             
-            # Handle legacy format: [...] (array of rules)
             elif isinstance(data, list):
                 rules = data
             
@@ -303,46 +279,39 @@ class ExtractionAgent:
                 logger.warning(f"Skipping invalid rule at index {i}: not a dictionary")
                 continue
             
-            # Validate required fields
             required_fields = ["category", "rule_type", "title", "description", "severity"]
             missing_fields = [field for field in required_fields if field not in rule]
             if missing_fields:
                 logger.warning(f"Skipping rule at index {i}: missing fields {missing_fields}")
                 continue
             
-            # Validate and normalize rule_type
             rule_type = rule["rule_type"].lower().strip()
             if rule_type not in ["do", "dont"]:
                 logger.warning(f"Invalid rule_type '{rule_type}' at index {i}, defaulting to 'do'")
                 rule_type = "do"
             
-            # Validate and normalize severity
             severity = rule["severity"].lower().strip()
             valid_severities = ["info", "low", "medium", "high", "critical"]
             if severity not in valid_severities:
                 logger.warning(f"Invalid severity '{severity}' at index {i}, defaulting to 'medium'")
                 severity = "medium"
             
-            # Normalize example_snippets
             example_snippets = rule.get("example_snippets", [])
             if not isinstance(example_snippets, list):
                 example_snippets = []
-            # Filter out empty snippets
             example_snippets = [s for s in example_snippets if s and isinstance(s, str) and s.strip()]
             
-            # Truncate title if too long
             title = str(rule["title"]).strip()
             if len(title) > 100:
                 title = title[:97] + "..."
             
-            # Build validated rule
             validated_rule = {
                 "category": str(rule["category"]).strip(),
                 "rule_type": rule_type,
                 "title": title,
                 "description": str(rule["description"]).strip(),
                 "severity": severity,
-                "example_snippets": example_snippets[:5],  # Limit to 5 snippets
+                "example_snippets": example_snippets[:5],  
             }
             
             validated.append(validated_rule)

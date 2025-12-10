@@ -27,9 +27,7 @@ if config.config_file_name:
 target_metadata = Base.metadata
 
 
-# ---------------------------
 # FILTER OBJECTS BY SCHEMA
-# ---------------------------
 def include_object(object, name, type_, reflected, compare_to):
 
     if type_ == "schema":
@@ -47,9 +45,7 @@ def include_object(object, name, type_, reflected, compare_to):
     return True
 
 
-# ---------------------------
 # OFFLINE MODE
-# ---------------------------
 def run_migrations_offline():
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
@@ -66,9 +62,7 @@ def run_migrations_offline():
         context.run_migrations()
 
 
-# ---------------------------
 # ONLINE MODE
-# ---------------------------
 def run_migrations_online():
     connectable = engine_from_config(
         config.get_section(config.config_ini_section),
