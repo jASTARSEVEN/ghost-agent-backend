@@ -16,6 +16,7 @@ from chat.schemas import ConversationLogOut, ConversationLogListResponse, Conver
 from authentication.models import User
 from authentication.utils import decode_token
 from common.dependencies import get_db, require_permission
+from common.response_handler import ResponseHandler
 
 
 router = APIRouter()
@@ -154,7 +155,7 @@ async def get_conversation_logs(
     result = await db.execute(stmt)
     logs = result.scalars().all()
     
-    return [
+    data = [
         ConversationLogOut(
             id=str(log.id),
             user_id=log.user_id,
@@ -173,6 +174,7 @@ async def get_conversation_logs(
         )
         for log in logs
     ]
+    return ResponseHandler.ok(message="Conversation logs retrieved successfully", data=data)
 
 
 @router.get("/api/conversation-logs/{conversation_id}", response_model=ConversationLogOut)
@@ -199,7 +201,7 @@ async def get_conversation_log_by_id(
             detail="Conversation log not found or access denied"
         )
     
-    return ConversationLogOut(
+    data = ConversationLogOut(
         id=str(log.id),
         user_id=log.user_id,
         conversation_id=log.conversation_id,
@@ -215,3 +217,4 @@ async def get_conversation_log_by_id(
         created_at=log.created_at.isoformat() if log.created_at else None,
         updated_at=log.updated_at.isoformat() if log.updated_at else None,
     )
+    return ResponseHandler.ok(message="Conversation log retrieved successfully", data=data)
