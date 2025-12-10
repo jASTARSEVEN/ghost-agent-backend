@@ -80,10 +80,6 @@ async def extract_rules(
 ):
     """
     Extract policy rules from uploaded files and/or raw text using AI.
-    
-    Files are processed in-memory and NOT stored on disk.
-    Only the extracted rules are saved to the database.
-    
     At least one source must be provided (files or raw_text).
     """
     # Validate that at least one source is provided
@@ -187,15 +183,6 @@ async def evaluate_conversation(
     """
     Evaluate a conversation for compliance against policy rules.
     
-    This endpoint:
-    1. Processes conversation events into structured format
-    2. Evaluates against policy rules using AI
-    3. Returns compliance findings with event_id references
-    4. Stores evaluation results for audit trail
-    
-    The response includes findings that reference specific event IDs from the conversation,
-    allowing the frontend to overlay compliance annotations on the existing transcript.
-    
     Args:
         conversation_id: ID of the conversation to evaluate
         request: Evaluation request with optional policy_set_id
@@ -245,10 +232,7 @@ async def get_latest_evaluation(
     user: User = Depends(require_permission("compliance.conversation.view"))
 ):
     """
-    Get the latest compliance evaluation for a conversation.
-    
-    Returns the most recent evaluation if one exists, otherwise returns 404.
-    Useful for checking if a conversation has already been evaluated.
+    Get the compliance evaluation for a conversation.
     
     Args:
         conversation_id: ID of the conversation

@@ -458,15 +458,6 @@ async def evaluate_conversation_compliance(
     """
     Evaluate a conversation for compliance against policy rules.
     
-    Main orchestration function that:
-    1. Checks for cached evaluation (unless force_reevaluate)
-    2. Validates conversation exists and is complete
-    3. Fetches policy rules
-    4. Processes conversation events
-    5. Calls evaluation agent
-    6. Stores results
-    7. Returns evaluation
-    
     Args:
         db: Database session
         conversation_id: ID of conversation to evaluate
