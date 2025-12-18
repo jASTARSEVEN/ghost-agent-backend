@@ -1,5 +1,6 @@
 import os
 import logging
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from authentication.routes.users import user_router
@@ -11,6 +12,8 @@ from common.config import settings
 from actions.routes import router as actions_router
 from compliance.routes import router as compliance_router
 
+from vonage_connector.webhooks import router as vonage_webhook_router
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -18,6 +21,14 @@ app = FastAPI(
     description="GhostAgent Backend APIs",
     version="1.0.0"
 )
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+logger = logging.getLogger(__name__)
 
 # CORS Middleware - Load allowed origins from environment
 ALLOWED_ORIGINS = os.getenv(
@@ -34,22 +45,22 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-async def validate_config():
-    """Validate critical configuration on startup"""
-    errors = []
+# @app.on_event("startup")
+# async def validate_config():
+#     """Validate critical configuration on startup"""
+#     errors = []
     
-    if not settings.DATABASE_URL:
-        errors.append("DATABASE_URL is required")
-    if not settings.SECRET_KEY:
-        errors.append("SECRET_KEY is required")
-    if len(settings.SECRET_KEY) < 32:
-        errors.append("SECRET_KEY must be at least 32 characters")
+#     if not settings.DATABASE_URL:
+#         errors.append("DATABASE_URL is required")
+#     if not settings.SECRET_KEY:
+#         errors.append("SECRET_KEY is required")
+#     if len(settings.SECRET_KEY) < 32:
+#         errors.append("SECRET_KEY must be at least 32 characters")
     
-    if errors:
-        raise RuntimeError(f"Configuration errors: {', '.join(errors)}")
+#     if errors:
+#         raise RuntimeError(f"Configuration errors: {', '.join(errors)}")
     
-    logger.info("Configuration validated successfully")
+#     logger.info("Configuration validated successfully")
 
 
 @app.get("/health")
@@ -88,3 +99,7 @@ app.include_router(permission_router, prefix="/api")
 app.include_router(ws_routes.router)
 app.include_router(actions_router, prefix="/api")
 app.include_router(compliance_router, prefix="/api") 
+app.include_router(vonage_webhook_router)
+
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="0.0.0.0", port=8000)

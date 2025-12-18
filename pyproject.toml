@@ -29,4 +29,8 @@ dependencies = [
     "redis>=6.4.0",
     "sqlalchemy>=2.0.43",
     "uvicorn[standard]>=0.37.0",
+    "vonage>=4.7.2",
+    "aiohttp>=3.13.2",
+    "websockets>=15.0.1",
+    "webrtcvad>=2.0.10",
 ]

@@ -1,0 +1,200 @@
+import os
+import logging
+from fastapi import APIRouter, Request, Depends
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime, timezone
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from authentication.utils import (
+    create_access_token,
+)
+from authentication.models import User, Role, user_roles
+from database import get_db
+import json
+from chat.socket import room_manager
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/vonage", tags=["vonage"])
+
+WEBSOCKET_BASE_URL = os.getenv("VONAGE_WEBSOCKET_URL")
+
+def ws_event(
+    *,
+    event_type: str,
+    user_id: str,
+    call_uuid: str | None = None,
+    media_uuid: str | None = None,
+    data: dict | None = None,
+):
+    return {
+        "event_type": event_type,
+        "user_id": user_id,
+        "call_uuid": call_uuid,
+        "media_uuid": media_uuid,
+        "data": data or {},
+        "received_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+async def get_role_name_by_user_id(user_id: int, db: AsyncSession) -> Optional[str]: 
+    stmt = select(user_roles.c.role_id).where(user_roles.c.user_id == user_id)
+    result = await db.execute(stmt)
+    role_id = result.scalar_one_or_none()
+    
+    if not role_id:
+        logger.warning(f"No role found for user_id {user_id}")
+        return None
+    
+    # Get role name from roles model by role_id
+    stmt = select(Role.name).where(Role.id == role_id)
+    result = await db.execute(stmt)
+    role_name = result.scalar_one_or_none()
+    
+    return role_name
+
+@router.post("/answer")
+async def answer_call(request: Request, db: AsyncSession = Depends(get_db)): 
+    try:  
+        data = await request.json()
+        
+        call_uuid = data.get("uuid")
+        conversation_uuid = data.get("conversation_uuid")
+        caller = data.get("from")
+        to_number = data.get("to")
+        
+        # 1. random choose CSR
+        user_id = 12
+        stmt = select(User).where(User.id == user_id)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            logger.error(f"User with id {user_id} not found")
+            phone_number = None
+            role = None
+        else:
+            phone_number = user.phone_number
+            role = await get_role_name_by_user_id(user_id, db)
+        
+        #2. generate token
+        token = create_access_token({"sub": str(user_id)}) 
+        
+        ws_uri = f"{WEBSOCKET_BASE_URL}/ws/{user_id}?token={token}&role={role}"
+        # ws_uri = f"{WEBSOCKET_BASE_URL}/vonage/audio-stream"
+
+        await room_manager.broadcast(
+            user_id,
+            ws_event(
+                event_type="call.incoming",
+                user_id=user_id,
+                call_uuid=call_uuid,
+                data={
+                    "from": caller,
+                    "to": to_number,
+                    "conversation_uuid": conversation_uuid,
+                },
+            ),
+        )
+        ncco = [
+            {
+                "action": "talk",
+                "text": "Please wait while we connect your call."
+            }, 
+            {
+                "action": "connect",
+                "endpoint": [
+                    { 
+                        "type": "phone",
+                        "number": phone_number
+                    }
+                ],
+                "from": to_number
+            },
+            {
+                "action": "connect",
+                "endpoint": [
+                    {
+                        "type": "websocket",
+                        "uri": f"{ws_uri}",
+                        "content-type": "audio/l16;rate=16000",
+                        "headers": {
+                            "uuid": call_uuid
+                        }
+                    }
+                ]
+            }
+        ]
+        return JSONResponse(content=ncco)
+ 
+    except Exception as e:
+        logger.error(f"Error handling answer webhook: {e}")
+        return JSONResponse(content=[
+            {
+                "action": "talk",
+                "text": "We're sorry, an error occurred. Please try again later."
+            }
+        ])
+
+@router.post("/event")
+async def call_event(request: Request): 
+    try:
+        data = await request.json()
+
+        uuid = data.get("uuid")
+        status = data.get("status")
+        direction = data.get("direction")
+        to_number = data.get("to")
+        
+        event_map = {
+            "started": "call.started",
+            "ringing": "call.ringing",
+            "answered": "call.answered",
+            "completed": "call.ended",
+            "failed": "call.failed",
+        }
+            
+        event_type = event_map.get(status, "unknown")
+        ws_event = {
+            "event_type": event_type,
+            "call_uuid": uuid,
+            "role": "system",
+            "data": {
+                "direction": direction,
+                "raw_status": status,
+                "from": data.get("from"),
+                "to": to_number,
+                "duration": data.get("duration"),
+                "reason": data.get("reason"),
+                "error_code": data.get("error_code"),
+            },
+            "received_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        # random user_id for testing
+        await room_manager.broadcast(user_id=str(12), message=ws_event)
+        
+        return {"status": "ok"}
+        
+    except Exception as e:
+        logger.error(f"Error handling event webhook: {e}")
+        return {"status": "error", "message": str(e)}
+
+@router.get("/answer")
+async def answer_call_get(request: Request): 
+    return await answer_call(request)
+
+@router.post("/fallback")
+async def fallback_answer(request: Request): 
+    logger.warning("Fallback answer webhook triggered")
+    
+    ncco = [
+        {
+            "action": "talk",
+            "text": "We're experiencing technical difficulties. Please call back later.",
+            "language": "en-US"
+        }
+    ]
+    
+    return JSONResponse(content=ncco)
+ 

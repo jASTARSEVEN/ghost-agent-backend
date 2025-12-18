@@ -17,6 +17,7 @@ from authentication.models import User
 from authentication.utils import decode_token
 from common.dependencies import get_db, require_permission
 from common.response_handler import ResponseHandler
+from vonage_connector.audio_websocket import tts_consumer, speech_to_text, create_wav_header
 
 
 router = APIRouter()
@@ -87,42 +88,87 @@ async def websocket_endpoint(
             pass
 
     send_task = asyncio.create_task(sender())
+ 
+    
+    ELEVENLABS_API_KEY = os.getenv("ELEVEN_API_KEY")
+    BUFFER_SIZE = 64000 
+    VONAGE_SAMPLE_RATE = 16000  
+    audio_buffer = bytearray()
+    tts_queue = asyncio.Queue()
 
     try:
+        tts_task = asyncio.create_task(tts_consumer(websocket, tts_queue))
+
         while True:
-            raw = await websocket.receive_text()
+            message = await websocket.receive()
+ 
 
-            try:
-                msg = json.loads(raw)
-            except:
-                msg = {"event_type": "invalid", "data": raw}
+            if "text" in message and message["text"] is not None:
+                text_data = message["text"]
+                print("Text message:", text_data) 
 
-            msg["user_id"] = user_id
-            if "received_at" not in msg:
-                msg["received_at"] = datetime.now(timezone.utc).isoformat()
 
-            # Health check ping
-            if msg.get("event_type") == "health_ping":
-                await room_manager.broadcast(user_id, msg)
-                continue
+            elif "bytes" in message and message["bytes"] is not None:
+                audio_data = message["bytes"]
+                audio_buffer.extend(audio_data)
+                if len(audio_buffer) >= BUFFER_SIZE:
+                    wav_audio = create_wav_header(bytes(audio_buffer), sample_rate=VONAGE_SAMPLE_RATE)
+                    
+                    transcript = await speech_to_text(
+                        wav_audio, 
+                        ELEVENLABS_API_KEY
+                    )
+                    
+                    if transcript and not '(' in transcript:
+                        print(f"STT Result: {transcript}")
+                        await websocket.send_text(json.dumps({
+                            "type": "transcription",
+                            "text": transcript
+                        }))
+                    
+                    audio_buffer.clear() 
 
-            #  Push event into Redis queue if available
-            if redis_client:
-                try:
-                    redis_client.lpush(QUEUE_NAME, json.dumps(msg))
-                    log.debug(f"Redis LPUSH success -> {QUEUE_NAME}")
-                except redis.exceptions.ConnectionError as e:
-                    log.error(f"Redis push error: {e}")
-                    msg["error"] = "redis_unavailable"
-            else:
-                log.warning("Redis not connected, message NOT queued!")
+    # try:
+    #     while True:
+    #         raw = await websocket.receive_text()
 
-            # Broadcast message to WebSocket room
-            await room_manager.broadcast(user_id, msg)
+    #         try:
+    #             msg = json.loads(raw)
+    #         except:
+    #             msg = {"event_type": "invalid", "data": raw}
+
+    #         msg["user_id"] = user_id
+    #         if "received_at" not in msg:
+    #             msg["received_at"] = datetime.now(timezone.utc).isoformat()
+
+    #         # Health check ping
+    #         if msg.get("event_type") == "health_ping":
+    #             await room_manager.broadcast(user_id, msg)
+    #             continue
+
+    #         #  Push event into Redis queue if available
+    #         if redis_client:
+    #             try:
+    #                 redis_client.lpush(QUEUE_NAME, json.dumps(msg))
+    #                 log.debug(f"Redis LPUSH success -> {QUEUE_NAME}")
+    #             except redis.exceptions.ConnectionError as e:
+    #                 log.error(f"Redis push error: {e}")
+    #                 msg["error"] = "redis_unavailable"
+    #         else:
+    #             log.warning("Redis not connected, message NOT queued!")
+
+    #         # Broadcast message to WebSocket room
+    #         await room_manager.broadcast(user_id, msg)
 
     except WebSocketDisconnect:
         pass
     finally:
+        if 'tts_task' in locals():
+            tts_task.cancel()
+            try:
+                await tts_task
+            except asyncio.CancelledError:
+                pass
         send_task.cancel()
         await room_manager.unregister(conn)
 
