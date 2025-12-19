@@ -1,5 +1,6 @@
 import os
 import logging
+import random
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -14,6 +15,7 @@ from authentication.models import User, Role, user_roles
 from database import get_db
 import json
 from chat.socket import room_manager
+import requests
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/vonage", tags=["vonage"])
@@ -52,7 +54,6 @@ async def get_role_name_by_user_id(user_id: int, db: AsyncSession) -> Optional[s
     role_name = result.scalar_one_or_none()
     
     return role_name
-
 @router.post("/answer")
 async def answer_call(request: Request, db: AsyncSession = Depends(get_db)): 
     try:  
@@ -62,12 +63,23 @@ async def answer_call(request: Request, db: AsyncSession = Depends(get_db)):
         conversation_uuid = data.get("conversation_uuid")
         caller = data.get("from")
         to_number = data.get("to")
-        
-        # 1. random choose CSR
-        user_id = 12
-        stmt = select(User).where(User.id == user_id)
+
+        # 1. randomly choose a CSR
+        stmt = select(User)
         result = await db.execute(stmt)
-        user = result.scalar_one_or_none()
+        users = result.scalars().all()
+        
+        if not users:
+            return JSONResponse(content=[
+                {
+                    "action": "talk",
+                    "text": "We're sorry, no agents are available. Please try again later."
+                }
+            ])
+        
+        selected_user = random.choice(users)
+        user_id = selected_user.id
+        user = selected_user
         
         if not user:
             logger.error(f"User with id {user_id} not found")
@@ -84,10 +96,10 @@ async def answer_call(request: Request, db: AsyncSession = Depends(get_db)):
         # ws_uri = f"{WEBSOCKET_BASE_URL}/vonage/audio-stream"
 
         await room_manager.broadcast(
-            user_id,
+            str(user_id),
             ws_event(
                 event_type="call.incoming",
-                user_id=user_id,
+                user_id=str(user_id),
                 call_uuid=call_uuid,
                 data={
                     "from": caller,
@@ -99,12 +111,12 @@ async def answer_call(request: Request, db: AsyncSession = Depends(get_db)):
         ncco = [
             {
                 "action": "talk",
-                "text": "Please wait while we connect your call."
-            }, 
+                "text": "Long time no see"
+            },
             {
                 "action": "connect",
                 "endpoint": [
-                    { 
+                    {
                         "type": "phone",
                         "number": phone_number
                     }
@@ -137,10 +149,10 @@ async def answer_call(request: Request, db: AsyncSession = Depends(get_db)):
         ])
 
 @router.post("/event")
-async def call_event(request: Request): 
+async def call_event(request: Request, db: AsyncSession = Depends(get_db)): 
     try:
         data = await request.json()
-
+        conversation_uuid = data.get("conversation_uuid")
         uuid = data.get("uuid")
         status = data.get("status")
         direction = data.get("direction")
@@ -155,11 +167,26 @@ async def call_event(request: Request):
         }
             
         event_type = event_map.get(status, "unknown")
-        ws_event = {
-            "event_type": event_type,
-            "call_uuid": uuid,
-            "role": "system",
-            "data": {
+
+        if(direction == "inbound"):
+            phone_number = data.get("from")
+        else:
+            phone_number = data.get("to")
+
+        stmt = select(User).where(User.phone_number == phone_number)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user:
+            user_id_number = user.id
+        else:
+            user_id_number = None
+
+        event_data = ws_event(   
+            event_type=event_type,
+            user_id=str(user_id_number),   
+            call_uuid=uuid,
+            data={
+                "role": "system",   
                 "direction": direction,
                 "raw_status": status,
                 "from": data.get("from"),
@@ -168,11 +195,11 @@ async def call_event(request: Request):
                 "reason": data.get("reason"),
                 "error_code": data.get("error_code"),
             },
-            "received_at": datetime.now(timezone.utc).isoformat(),
-        }
+        )
 
-        # random user_id for testing
-        await room_manager.broadcast(user_id=str(12), message=ws_event)
+        await room_manager.broadcast(user_id=str(user_id_number), message=event_data)
+
+        print(f"Event data: {room_manager.rooms.get(str(user_id_number))}")
         
         return {"status": "ok"}
         

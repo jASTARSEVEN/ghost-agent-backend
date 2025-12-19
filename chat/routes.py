@@ -101,6 +101,10 @@ async def websocket_endpoint(
 
         while True:
             message = await websocket.receive()
+            
+            # Check if the message indicates a disconnect
+            if message.get("type") == "websocket.disconnect":
+                break
  
 
             if "text" in message and message["text"] is not None:
