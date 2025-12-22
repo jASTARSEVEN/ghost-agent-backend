@@ -42,26 +42,24 @@ def ws_event(
 async def get_role_name_by_user_id(user_id: int, db: AsyncSession) -> Optional[str]: 
     stmt = select(user_roles.c.role_id).where(user_roles.c.user_id == user_id)
     result = await db.execute(stmt)
-    role_id = result.scalar_one_or_none()
+    role_id = result.scalars().first()
     
     if not role_id:
         logger.warning(f"No role found for user_id {user_id}")
         return None
     
-    # Get role name from roles model by role_id
     stmt = select(Role.name).where(Role.id == role_id)
     result = await db.execute(stmt)
-    role_name = result.scalar_one_or_none()
+    role_name = result.scalars().first()
     
     return role_name
+
 @router.post("/answer")
 async def answer_call(request: Request, db: AsyncSession = Depends(get_db)): 
     try:  
         data = await request.json()
         
         call_uuid = data.get("uuid")
-        conversation_uuid = data.get("conversation_uuid")
-        caller = data.get("from")
         to_number = data.get("to")
 
         # 1. randomly choose a CSR
@@ -95,19 +93,6 @@ async def answer_call(request: Request, db: AsyncSession = Depends(get_db)):
         ws_uri = f"{WEBSOCKET_BASE_URL}/ws/{user_id}?token={token}&role={role}"
         # ws_uri = f"{WEBSOCKET_BASE_URL}/vonage/audio-stream"
 
-        await room_manager.broadcast(
-            str(user_id),
-            ws_event(
-                event_type="call.incoming",
-                user_id=str(user_id),
-                call_uuid=call_uuid,
-                data={
-                    "from": caller,
-                    "to": to_number,
-                    "conversation_uuid": conversation_uuid,
-                },
-            ),
-        )
         ncco = [
             {
                 "action": "talk",
@@ -152,56 +137,58 @@ async def answer_call(request: Request, db: AsyncSession = Depends(get_db)):
 async def call_event(request: Request, db: AsyncSession = Depends(get_db)): 
     try:
         data = await request.json()
-        conversation_uuid = data.get("conversation_uuid")
         uuid = data.get("uuid")
         status = data.get("status")
         direction = data.get("direction")
         to_number = data.get("to")
+
+        vonage_numbers = os.getenv("VONAGE_NUMBERS", "").split(",")
+        vonage_numbers = [num.strip() for num in vonage_numbers if num.strip()]
         
-        event_map = {
-            "started": "call.started",
-            "ringing": "call.ringing",
-            "answered": "call.answered",
-            "completed": "call.ended",
-            "failed": "call.failed",
-        }
-            
-        event_type = event_map.get(status, "unknown")
-
-        if(direction == "inbound"):
-            phone_number = data.get("from")
+        if to_number and (to_number in vonage_numbers or "ws://" in to_number or "wss://" in to_number):
+            pass
         else:
-            phone_number = data.get("to")
+            event_map = {
+                "started": "call.started",
+                "ringing": "call.ringing",
+                "answered": "call.answered",
+                "completed": "call.ended",
+                "failed": "call.failed",
+            }
+                
+            event_type = event_map.get(status, "unknown")
 
-        stmt = select(User).where(User.phone_number == phone_number)
-        result = await db.execute(stmt)
-        user = result.scalar_one_or_none()
-        if user:
-            user_id_number = user.id
-        else:
-            user_id_number = None
+            if(direction == "inbound"):
+                phone_number = data.get("from")
+            else:
+                phone_number = data.get("to")
 
-        event_data = ws_event(   
-            event_type=event_type,
-            user_id=str(user_id_number),   
-            call_uuid=uuid,
-            data={
-                "role": "system",   
-                "direction": direction,
-                "raw_status": status,
-                "from": data.get("from"),
-                "to": to_number,
-                "duration": data.get("duration"),
-                "reason": data.get("reason"),
-                "error_code": data.get("error_code"),
-            },
-        )
+            stmt = select(User).where(User.phone_number == phone_number)
+            result = await db.execute(stmt)
+            user = result.scalars().first()
+            if user:
+                user_id_number = user.id
+            else:
+                user_id_number = None
 
-        await room_manager.broadcast(user_id=str(user_id_number), message=event_data)
+            event_data = ws_event(   
+                event_type=event_type,
+                user_id=str(user_id_number),   
+                call_uuid=uuid,
+                data={
+                    "role": "system",   
+                    "direction": direction,
+                    "raw_status": status,
+                    "from": data.get("from"),
+                    "to": to_number,
+                    "duration": data.get("duration"),
+                    "reason": data.get("reason"),
+                    "error_code": data.get("error_code"),
+                },
+            )
 
-        print(f"Event data: {room_manager.rooms.get(str(user_id_number))}")
-        
-        return {"status": "ok"}
+            await room_manager.broadcast(user_id=str(user_id_number), message=event_data)
+            return {"status": "ok"}
         
     except Exception as e:
         logger.error(f"Error handling event webhook: {e}")

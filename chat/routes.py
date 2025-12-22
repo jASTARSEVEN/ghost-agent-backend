@@ -130,39 +130,28 @@ async def websocket_endpoint(
                             "text": transcript
                         }))
                     
+                    msg = {
+                        "event_type": "audio_transcription",
+                        "data": {
+                            "transcript": transcript,
+                        }
+                    }
+
+                    msg["user_id"] = user_id
+                    if "received_at" not in msg:
+                        msg["received_at"] = datetime.now(timezone.utc).isoformat()
+
+                    if redis_client:
+                        try:
+                            redis_client.lpush(QUEUE_NAME, json.dumps(msg))
+                            log.debug(f"Redis LPUSH success -> {QUEUE_NAME}")
+                        except redis.exceptions.ConnectionError as e:
+                            log.error(f"Redis push error: {e}")
+                            msg["error"] = "redis_unavailable"
+                    else:
+                        log.warning("Redis not connected, message NOT queued!")
+ 
                     audio_buffer.clear() 
-
-    # try:
-    #     while True:
-    #         raw = await websocket.receive_text()
-
-    #         try:
-    #             msg = json.loads(raw)
-    #         except:
-    #             msg = {"event_type": "invalid", "data": raw}
-
-    #         msg["user_id"] = user_id
-    #         if "received_at" not in msg:
-    #             msg["received_at"] = datetime.now(timezone.utc).isoformat()
-
-    #         # Health check ping
-    #         if msg.get("event_type") == "health_ping":
-    #             await room_manager.broadcast(user_id, msg)
-    #             continue
-
-    #         #  Push event into Redis queue if available
-    #         if redis_client:
-    #             try:
-    #                 redis_client.lpush(QUEUE_NAME, json.dumps(msg))
-    #                 log.debug(f"Redis LPUSH success -> {QUEUE_NAME}")
-    #             except redis.exceptions.ConnectionError as e:
-    #                 log.error(f"Redis push error: {e}")
-    #                 msg["error"] = "redis_unavailable"
-    #         else:
-    #             log.warning("Redis not connected, message NOT queued!")
-
-    #         # Broadcast message to WebSocket room
-    #         await room_manager.broadcast(user_id, msg)
 
     except WebSocketDisconnect:
         pass
