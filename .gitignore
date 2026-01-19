@@ -29,3 +29,6 @@ recordings/
 .cursor/
 
 celery_service/celerybeat-schedule
+
+node_modules/
+private.key
